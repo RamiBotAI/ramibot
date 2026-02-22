@@ -1,0 +1,15 @@
+# Force LF for shell scripts (Docker/Linux)
+*.sh text eol=lf
+
+# Dockerfile must be LF
+Dockerfile text eol=lf
+
+# YAML files
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Python
+*.py text eol=lf
+
+# Default auto normalization
+* text=auto
