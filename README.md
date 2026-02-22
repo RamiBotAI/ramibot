@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/RamiBot.png" width="280" alt="RamiBot Logo" />
+  <img src="assets/ramibot.png" width="280" alt="RamiBot Logo" />
 </p>
 
 <h2 align="center">RamiBot — AI Security Operations Platform</h2>
