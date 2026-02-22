@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "rami-kali-docker-local": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "rami-kali",
+        "python3",
+        "/opt/rami-kali/mcp_server.py"
+      ],
+      "type": "stdio"
+    }
+  }
+}

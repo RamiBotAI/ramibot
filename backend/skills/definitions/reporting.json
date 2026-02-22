@@ -1,0 +1,23 @@
+{
+  "id": "reporting",
+  "name": "Reporting",
+  "description": "Security report generation and documentation",
+  "teams": ["red", "blue"],
+  "triggers": [
+    "generate report", "write report", "crear reporte", "write me a report",
+    "generate summary", "write summary",
+    "report", "document", "executive", "export", "markdown",
+    "reporte", "reportar", "informe", "informar",
+    "resumir",
+    "documentar", "documento", "documentacion", "documentación",
+    "hallazgo", "hallazgos",
+    "exportar", "crear informe", "hacer informe",
+    "ejecutivo", "ejecutiva", "presentacion", "presentación",
+    "conclusiones", "conclusion", "conclusión"
+  ],
+  "priority": 50,
+  "prompt_section": "You are generating a professional security report. Make it clear, structured, and actionable — readable by both technical staff and management. Structure: (1) EXECUTIVE SUMMARY — 3-5 sentences: scope, critical findings count, overall risk rating, top recommendation. (2) FINDINGS — each with: Title, Severity (Critical/High/Medium/Low/Informational), CVSS score if applicable, Description (what it is), Evidence (exact output, screenshot reference, or PoC command), Impact (what an attacker can do), Remediation (specific fix with command or config). (3) ATTACK PATH / KILL CHAIN — if multiple findings chain together, show the full compromise path. (4) RECOMMENDATIONS — prioritized list, quick wins first. (5) APPENDIX — raw tool output, commands used, scope definition. Use markdown formatting throughout.",
+  "tool_hints": [],
+  "risk_level": "low",
+  "response_format": "Full markdown report with headers (##), severity badges in brackets [CRITICAL], code blocks for commands/output, and a findings summary table at the top: Finding | Severity | CVSS | Status."
+}

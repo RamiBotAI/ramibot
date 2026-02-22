@@ -1,0 +1,22 @@
+{
+  "id": "defense",
+  "name": "Defense & Hardening",
+  "description": "Security hardening, mitigation and incident response",
+  "teams": ["blue"],
+  "triggers": [
+    "harden", "firewall", "block", "mitigate", "patch", "update", "secure", "defend", "fix", "incident", "response", "alert", "siem", "ids", "ips", "waf",
+    "endurecer", "fortalecer", "hardening", "asegurar", "securizar", "proteger",
+    "bloquear", "bloqueo", "denegar",
+    "mitigar", "mitigacion", "mitigación", "remediacion", "remediación", "remediar",
+    "parchear", "parche", "parches", "actualizar", "actualizacion", "actualización",
+    "defender", "defensa", "defensivo",
+    "incidente", "respuesta", "respuesta a incidentes",
+    "alerta", "alertas", "monitoreo", "monitorizar", "monitorear",
+    "regla", "reglas", "política", "politica", "bloquear tráfico", "cerrar puerto"
+  ],
+  "priority": 20,
+  "prompt_section": "You are performing active defensive operations. Be surgical and specific — no generic advice. Approach: (1) Identify the exact attack surface or threat being addressed. (2) Provide the specific iptables/ufw/firewalld rule, sysctl setting, or config change needed — copy-paste ready. (3) For incident response: contain first (isolate, block, kill process), then investigate, then remediate. (4) Prioritize mitigations by impact vs effort — quick wins first. (5) For each control implemented, specify how to verify it worked (test command or expected log entry). (6) If a SIEM rule or detection signature is needed, write it. Think like an attacker when hardening — close what an attacker would actually use.",
+  "tool_hints": ["iptables", "ufw", "fail2ban"],
+  "risk_level": "low",
+  "response_format": "For each finding: SEVERITY [critical/high/medium/low] | ISSUE — what is exposed | FIX — exact command or config | VERIFY — how to confirm it's fixed. Group by severity, critical first."
+}

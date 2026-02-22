@@ -1,0 +1,99 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.cover
+
+# ============================================================
+# Node / Frontend
+# ============================================================
+node_modules/
+frontend/dist/
+frontend/.cache/
+.parcel-cache/
+.next/
+.nuxt/
+
+# ============================================================
+# Environment & Secrets  ← NEVER commit real credentials
+# ============================================================
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Settings with API keys (use settings.example.json as template)
+backend/settings.json
+
+# ============================================================
+# Database
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.db-journal
+
+# ============================================================
+# Logs
+# ============================================================
+*.log
+logs/
+log/
+backend/skill_decisions.log
+
+# ============================================================
+# Runtime / Generated
+# ============================================================
+reports/
+data/
+*.tmp
+*.temp
+*.pid
+*.seed
+
+# ============================================================
+# Claude Code local config  ← machine-specific, not shareable
+# ============================================================
+.claude/
+
+# ============================================================
+# Local startup scripts (contain absolute local paths)
+# ============================================================
+Start_all.bat
+
+# ============================================================
+# IDE & OS
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# Docker volumes / runtime state
+# ============================================================
+mcp-data/
+mcp-reports/

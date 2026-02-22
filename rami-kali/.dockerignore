@@ -1,0 +1,37 @@
+# Version control
+.git
+.gitignore
+
+# IDE / editor
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Runtime data (mounted as volumes)
+scan_results.db
+audit.log
+mcp_server.log
+reports/
+
+# OS artifacts
+Thumbs.db
+.DS_Store
+
+# Documentation source (not needed at runtime)
+rami-kali_architecture.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

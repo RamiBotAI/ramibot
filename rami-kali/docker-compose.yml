@@ -1,0 +1,104 @@
+# ============================================================================
+# Red Team MCP Server — Docker Compose
+# ============================================================================
+#
+# Start:   docker compose up
+# Build:   docker compose build
+# Logs:    docker compose logs -f
+# Shell:   docker compose exec mcp-server bash
+# Stop:    docker compose down
+#
+# ============================================================================
+
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rami-kali
+    image: rami-kali:latest
+
+    # ── MCP uses stdin/stdout JSON-RPC ────────────────────────────────────
+    stdin_open: true
+    tty: true
+
+    # ── Environment overrides ─────────────────────────────────────────────
+    environment:
+      - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-INFO}
+      - MCP_DATABASE=/opt/rami-kali/data/scan_results.db
+      - MCP_AUDIT_LOG=/opt/rami-kali/data/audit.log
+      - MCP_REPORT_DIR=/opt/rami-kali/reports
+
+    # ── Persistent volumes ────────────────────────────────────────────────
+    #  data/   → SQLite database + audit log (survives container restarts)
+    #  reports/→ generated markdown reports
+    #  config  → user can override config without rebuilding
+    volumes:
+      - mcp-data:/opt/rami-kali/data
+      - mcp-reports:/opt/rami-kali/reports
+      - ./config.yaml:/opt/rami-kali/config.yaml:ro
+
+    # ── Network: host mode allows scanning the local network ──────────────
+    #    Change to bridge + port mapping if you only scan remote targets.
+    network_mode: host
+
+    # ── Linux capabilities for ARP/network tools ─────────────────────────
+    #    Required by bettercap, ettercap, arpspoof, macchanger, etc.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    # ── Wireless USB passthrough (uncomment for WiFi adapter access) ─────
+    # privileged: true
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+
+    # ── Bridge mode: uncomment for LM Studio access from container ───────
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+    # ── Resource limits ───────────────────────────────────────────────────
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+
+    # ── Restart policy ────────────────────────────────────────────────────
+    restart: unless-stopped
+
+    # ── Depends on PostgreSQL if enabled ──────────────────────────────────
+    # depends_on:
+    #   msf-db:
+    #     condition: service_healthy
+
+  # ── Optional: PostgreSQL for Metasploit database ────────────────────────
+  # Uncomment this service and the depends_on above to use a dedicated
+  # PostgreSQL instance for Metasploit instead of the built-in SQLite.
+  #
+  # msf-db:
+  #   image: postgres:15-alpine
+  #   container_name: rami-kali-msf-db
+  #   environment:
+  #     POSTGRES_USER: msf
+  #     POSTGRES_PASSWORD: msf_password
+  #     POSTGRES_DB: msf_database
+  #   volumes:
+  #     - msf-pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U msf"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+
+volumes:
+  mcp-data:
+    driver: local
+  mcp-reports:
+    driver: local
+  # msf-pgdata:
+  #   driver: local

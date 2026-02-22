@@ -1,0 +1,25 @@
+{
+  "id": "analysis",
+  "name": "Analysis",
+  "description": "Log analysis, traffic analysis and result interpretation",
+  "teams": ["red", "blue"],
+  "triggers": [
+    "analyze", "analysis", "log", "traffic", "pcap", "wireshark", "interpret", "investigate", "forensic", "review", "check", "audit",
+    "analizar", "analiza", "análisis", "analize",
+    "trafico", "tráfico", "captura", "capturar",
+    "interpretar", "interpreta",
+    "investigar", "investiga", "investigacion", "investigación",
+    "forense", "forensico", "forénse",
+    "revisar", "revisa", "revision", "revisión",
+    "verificar", "verifica", "comprobar", "comprueba",
+    "auditoria", "auditoría", "auditar",
+    "logs", "registro", "registros", "trazas", "eventos",
+    "anomalia", "anomalía", "anomalias", "anomalías", "sospechoso", "sospechosa",
+    "correlacionar", "detectar", "que hace", "qué hace", "qué está", "que está"
+  ],
+  "priority": 30,
+  "prompt_section": "You are performing deep security analysis. Be a detective — extract signal from noise. Approach: (1) Parse the input data (logs, pcap, tool output, config) systematically. (2) Look for: authentication anomalies, unusual outbound connections, lateral movement patterns, privilege escalation traces, persistence mechanisms, C2 beaconing (regular intervals, unusual ports, encoded traffic). (3) Correlate events across time and source — build a timeline if multiple events are present. (4) Identify Indicators of Compromise (IoCs): IPs, domains, hashes, user agents, registry keys. (5) Attribute TTPs to known attack patterns (MITRE ATT&CK) when possible. (6) For red team context: identify what was noisy, what triggered alerts, and how to be stealthier. For blue team: identify detection gaps and recommended response actions.",
+  "tool_hints": ["wireshark", "tcpdump", "grep"],
+  "risk_level": "low",
+  "response_format": "Start with SUMMARY (2-3 sentences: what happened, when, severity). Then TIMELINE of key events. Then IOCs list (IP | Domain | Hash | Type | Confidence). End with RECOMMENDED ACTIONS — specific, ordered by priority."
+}

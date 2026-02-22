@@ -1,0 +1,20 @@
+{
+  "openai": {
+    "api_key": "your_openai_api_key_here"
+  },
+  "anthropic": {
+    "api_key": "your_anthropic_api_key_here"
+  },
+  "openrouter": {
+    "api_key": "your_openrouter_api_key_here"
+  },
+  "lmstudio": {
+    "base_url": "http://localhost:11435"
+  },
+  "ollama": {
+    "base_url": "http://localhost:11434"
+  },
+  "docker": {
+    "container": "rami-kali"
+  }
+}
