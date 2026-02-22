@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MCP Server - Red Team AI Assistant v2.0
+MCP Server - Rami-kali AI Assistant v2.0
 Integrates Kali Linux penetration testing tools with LM Studio via MCP protocol.
 
 DISCLAIMER: This tool is designed for AUTHORIZED penetration testing and security
