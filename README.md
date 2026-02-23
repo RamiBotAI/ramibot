@@ -60,7 +60,7 @@ The core differentiator is the **skill pipeline**: a prompt engineering system t
 │                         FRONTEND (React 19)                     │
 │  Sidebar  │  ChatPanel  │  SettingsModal  │  DockerTerminal     │
 │                    Zustand State Store                          │
-│           SSE consumer / fetch client (port 5173)              │
+│           SSE consumer / fetch client (port 5173)               │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ HTTP / SSE
 ┌───────────────────────────▼─────────────────────────────────────┐
