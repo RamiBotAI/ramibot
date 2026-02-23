@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import useStore from '../store'
-import { X, Key, Globe, Save, Wrench, Plus, Trash2, Terminal, Link, Shield, Tv2, Container, Activity, RefreshCw, Trash } from 'lucide-react'
+import { X, Key, Globe, Save, Wrench, Plus, Trash2, Terminal, Link, Shield, Tv2, Container, Activity, RefreshCw, Trash, Crosshair } from 'lucide-react'
 
 /* ── Shared input styles ─────────────────────────────── */
 const fieldInput = {
@@ -355,6 +355,149 @@ function PanelMcp() {
   )
 }
 
+/* ── Scope panel ─────────────────────────────────────── */
+function PanelScope() {
+  const [scope, setScope] = useState([])
+  const [requireCheck, setRequireCheck] = useState(true)
+  const [newCidr, setNewCidr] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+
+  const fetchScope = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/scope')
+      if (res.ok) {
+        const data = await res.json()
+        setScope(data.allowed_scope || [])
+        setRequireCheck(data.require_scope_check ?? true)
+      }
+    } catch {}
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchScope() }, [])
+
+  const addCidr = () => {
+    const cidr = newCidr.trim()
+    if (!cidr) return
+    if (scope.includes(cidr)) { setError('Already in list'); return }
+    setScope(prev => [...prev, cidr])
+    setNewCidr('')
+    setError('')
+  }
+
+  const removeCidr = (cidr) => setScope(prev => prev.filter(c => c !== cidr))
+
+  const saveScope = async () => {
+    setSaving(true); setError(''); setStatus('')
+    try {
+      const res = await fetch('/api/scope', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowed_scope: scope, require_scope_check: requireCheck }),
+      })
+      const data = await res.json()
+      if (!res.ok) setError(data.detail || 'Save failed')
+      else setStatus(data.restart === 'ok' ? 'Saved — container restarted' : `Saved (restart ${data.restart})`)
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {/* Scope check toggle */}
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--bd)', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Crosshair size={13} style={{ color: requireCheck ? `rgb(var(--accent))` : 'var(--t2)' }} />
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.65rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t1)' }}>Enforce Scope Check</span>
+        </div>
+        <Toggle on={requireCheck} onClick={() => setRequireCheck(v => !v)} />
+      </div>
+
+      {/* CIDR list */}
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--bd)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.55rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--t2)', marginBottom: '0.25rem' }}>
+          Allowed Targets (CIDR)
+        </div>
+
+        {loading && (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--t3)' }}>Loading...</div>
+        )}
+
+        {!loading && scope.length === 0 && (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--t3)', padding: '0.35rem 0' }}>
+            No ranges defined — all targets blocked.
+          </div>
+        )}
+
+        {scope.map((cidr) => (
+          <div key={cidr} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'var(--bg)', border: '1px solid var(--bd)', padding: '0.35rem 0.6rem',
+          }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: `rgb(var(--accent))` }}>{cidr}</span>
+            <button onClick={() => removeCidr(cidr)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '0.1rem', lineHeight: 0, transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#ff3250'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--t3)'}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+
+        {/* Add CIDR row */}
+        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.25rem' }}>
+          <input
+            type="text" value={newCidr}
+            onChange={e => { setNewCidr(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && addCidr()}
+            placeholder="192.168.2.0/24"
+            style={{ ...fieldInput, flex: 1 }}
+            onFocus={focusAccent} onBlur={blurAccent}
+          />
+          <button onClick={addCidr} style={{
+            padding: '0.4rem 0.65rem', background: `rgb(var(--accent)/0.1)`,
+            border: `1px solid rgb(var(--accent)/0.4)`, borderRadius: 0,
+            color: `rgb(var(--accent))`, cursor: 'pointer', lineHeight: 0,
+            transition: 'background 0.15s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = `rgb(var(--accent)/0.2)`}
+            onMouseLeave={e => e.currentTarget.style.background = `rgb(var(--accent)/0.1)`}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+
+      {error && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#ff3250' }}>{error}</span>}
+      {status && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#22c55e' }}>{status}</span>}
+
+      <button onClick={saveScope} disabled={saving} style={{
+        display: 'flex', alignItems: 'center', gap: '0.4rem',
+        padding: '0.38rem 0.75rem', alignSelf: 'flex-start',
+        background: `rgb(var(--accent)/0.1)`, border: `1px solid rgb(var(--accent)/0.4)`,
+        borderRadius: 0, color: `rgb(var(--accent))`,
+        fontFamily: 'var(--font-display)', fontSize: '0.6rem',
+        letterSpacing: '0.14em', textTransform: 'uppercase',
+        cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.5 : 1,
+      }}
+        onMouseEnter={e => { if (!saving) e.currentTarget.style.background = `rgb(var(--accent)/0.18)` }}
+        onMouseLeave={e => e.currentTarget.style.background = `rgb(var(--accent)/0.1)`}
+      >
+        <Save size={12} />{saving ? 'SAVING...' : 'SAVE & RESTART'}
+      </button>
+
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--t3)' }}>
+        # edits rami-kali/config.yaml and restarts the container
+      </div>
+    </div>
+  )
+}
+
 /* ── Skill Log panel ─────────────────────────────────── */
 function PanelSkillLog() {
   const [entries, setEntries] = useState([])
@@ -514,6 +657,7 @@ function SettingsModal({ onClose }) {
     { id: 'docker',    label: 'Docker',     icon: Container },
     { id: 'tor',       label: 'Tor',        icon: Shield },
     { id: 'mcp',       label: 'MCP',        icon: Wrench },
+    { id: 'scope',     label: 'Scope',      icon: Crosshair },
     { id: 'skilllog',  label: 'Skill Log',  icon: Activity },
   ]
 
@@ -586,6 +730,7 @@ function SettingsModal({ onClose }) {
             {activeTab === 'docker'  && <PanelDocker  form={form} handleChange={handleChange} />}
             {activeTab === 'tor'     && <PanelTor />}
             {activeTab === 'mcp'     && <PanelMcp />}
+            {activeTab === 'scope'   && <PanelScope />}
             {activeTab === 'skilllog' && <PanelSkillLog />}
           </div>
         </div>

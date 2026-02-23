@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.1-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.2-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,9 +26,13 @@
 </p>
 
 
-# RamiBot v3.1
+# RamiBot v3.2
 
 A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, and Tor transparent proxy management.
+
+<p align="center">
+  <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
+</p>
 
 ---
 
@@ -62,22 +66,22 @@ The core differentiator is the **skill pipeline**: a prompt engineering system t
 ┌───────────────────────────▼─────────────────────────────────────┐
 │                      BACKEND (FastAPI)                          │
 │                                                                 │
-│  /api/chat/stream ──► SkillPipeline ──► LLM Adapter            │
-│                             │                    │             │
-│                      PromptComposer       httpx (SSE)          │
-│                             │                    │             │
-│                      System Prompt        Provider API         │
+│  /api/chat/stream ──► SkillPipeline ──► LLM Adapter             │
+│                             │                    │              │
+│                      PromptComposer       httpx (SSE)           │
+│                             │                    │              │
+│                      System Prompt        Provider API          │
 │                                                                 │
-│  Tool call detected ──► MCPClient ──► rami-kali MCP server     │
-│                     (auto-configured)   (docker exec stdio)    │
-│                                    ──► MCP Server (stdio/HTTP) │
-│  Tool result ──────────────────────► LLM follow-up             │
+│  Tool call detected ──► MCPClient ──► rami-kali MCP server      │
+│                     (auto-configured)   (docker exec stdio)     │
+│                                    ──► MCP Server (stdio/HTTP)  │
+│  Tool result ──────────────────────► LLM follow-up              │
 │                                                                 │
-│  /api/terminal/* ──► TerminalSession ──► docker exec           │
-│  /api/docker/tor ──► tor_start/stop  ──► iptables (container)  │
+│  /api/terminal/* ──► TerminalSession ──► docker exec            │
+│  /api/docker/tor ──► tor_start/stop  ──► iptables (container)   │
 │                                                                 │
-│  aiosqlite ──► ramibot.db                                      │
-│  settings.json ──► provider credentials + docker config        │
+│  aiosqlite ──► ramibot.db                                       │
+│  settings.json ──► provider credentials + docker config         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -402,15 +406,20 @@ docker ps | grep rami-kali
 
 #### 4. Scope configuration
 
-Allowed target ranges are defined in `rami-kali/config.yaml` under `security.allowed_scope`. Edit before starting the container if needed:
+Allowed target ranges are managed from **Settings > Scope** in the UI. Changes are written to `rami-kali/config.yaml` and the container is restarted automatically — no rebuild required.
+
+You can also edit the file directly before starting the container:
 
 ```yaml
 security:
+  require_scope_check: true   # set to false to disable enforcement
   allowed_scope:
     - "192.168.1.0/24"
     - "10.0.0.0/8"
     - "172.16.0.0/12"
 ```
+
+The MCP server rejects any tool call whose target IP falls outside these ranges.
 
 #### Auto-registration
 
@@ -487,6 +496,18 @@ Add MCP servers from Settings > MCP. Each server requires:
 Servers are persisted in SQLite and reconnected on backend restart.
 
 > **Note:** The `rami-kali` server is pre-configured automatically on first startup if the `rami-kali` Docker container is running. No manual entry is needed. If the container is not running, the server will appear as disconnected in Settings > MCP and can be reconnected after starting the container with `make rami-kali-start`.
+
+### Scope
+
+Allowed target ranges for the `rami-kali` MCP server are managed from **Settings > Scope**.
+
+- Add or remove CIDR ranges with immediate visual feedback
+- Toggle **Enforce Scope Check** to enable or disable enforcement entirely
+- Click **SAVE & RESTART** to write `rami-kali/config.yaml` and restart the container in one action
+
+No Docker rebuild is required. The config file is bind-mounted, so the container picks up the new values on restart.
+
+The underlying file (`rami-kali/config.yaml`) can also be edited directly — the UI reads from it on load.
 
 ### Skill Log
 
@@ -630,6 +651,21 @@ When MCP is enabled and the LLM emits a tool call:
 | POST | `/api/terminal/resize` | Resize PTY |
 | POST | `/api/terminal/stop` | Terminate session |
 
+### Scope
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/scope` | Read `allowed_scope` and `require_scope_check` from `config.yaml` |
+| PUT | `/api/scope` | Write scope config and restart the `rami-kali` container |
+
+`PUT /api/scope` body:
+```json
+{
+  "allowed_scope": ["192.168.1.0/24", "10.0.0.0/8"],
+  "require_scope_check": true
+}
+```
+
 ### Settings
 
 | Method | Path | Description |
@@ -677,35 +713,6 @@ RamiBot is designed for use in authorized, controlled environments.
 
 ---
 
-## Roadmap
-
-**Current state (v3.1):**
-
-- Multi-provider LLM support with full streaming
-- Security skill pipeline with red and blue team modes
-- MCP client (stdio + HTTP) with server persistence
-- **rami-kali integration**: Kali Linux Docker container with 41+ pentest tools, auto-seeded as MCP server on first run
-- Docker terminal (PTY on Unix, pipes on Windows)
-- Tor transparent proxy management
-- SQLite conversation persistence with JSON and Markdown export
-- Skill decision audit log
-
-**Planned:**
-
-- Per-conversation skill override (bypass pipeline for general-purpose use)
-- Extended MCP: resource subscriptions and sampling support
-- Reasoning token budget UI control per provider
-- Structured output parsing for skill response formats (tables, SEVERITY blocks)
-- Basic authentication layer for multi-user lab deployment
-- Plugin interface for custom skill definitions without backend restart
-
-**Research directions:**
-
-- Chained skill activation for multi-phase workflows within a single session
-- Automated report generation triggered on session close
-- MITRE ATT&CK technique tagging from LLM output
-- Integration with local vulnerability databases for offline CVE lookup
-- Semantic skill classification using local embedding models
 
 ---
 

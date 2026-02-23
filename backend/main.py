@@ -3,8 +3,11 @@ import time
 import asyncio
 import base64
 import sys
+import ipaddress
 from pathlib import Path
 from contextlib import asynccontextmanager
+
+import yaml
 
 # Windows: force ProactorEventLoop so asyncio.create_subprocess_exec works.
 # uvicorn --reload uses SelectorEventLoop which does NOT support subprocesses.
@@ -43,6 +46,7 @@ from terminal import (
 )
 
 SETTINGS_PATH = Path(__file__).parent / "settings.json"
+CONFIG_PATH = Path(__file__).parent.parent / "rami-kali" / "config.yaml"
 
 skill_pipeline = SkillPipeline()
 
@@ -204,6 +208,11 @@ class MCPCallRequest(BaseModel):
     server: str
     tool: str
     arguments: dict = {}
+
+
+class ScopeUpdate(BaseModel):
+    allowed_scope: list[str]
+    require_scope_check: bool = True
 
 
 # --- Health ---
@@ -611,6 +620,69 @@ async def call_mcp_tool(body: MCPCallRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
     return result
+
+
+# --- Scope ---
+
+@app.get("/api/scope")
+async def get_scope():
+    if not CONFIG_PATH.exists():
+        raise HTTPException(status_code=404, detail="rami-kali/config.yaml not found")
+    cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    security = cfg.get("security", {})
+    return {
+        "allowed_scope": security.get("allowed_scope", []),
+        "require_scope_check": security.get("require_scope_check", True),
+    }
+
+
+@app.put("/api/scope")
+async def update_scope(body: ScopeUpdate):
+    if not CONFIG_PATH.exists():
+        raise HTTPException(status_code=404, detail="rami-kali/config.yaml not found")
+
+    # Validate each CIDR
+    for cidr in body.allowed_scope:
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid CIDR: {cidr}")
+
+    cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    cfg.setdefault("security", {})
+    cfg["security"]["allowed_scope"] = body.allowed_scope
+    cfg["security"]["require_scope_check"] = body.require_scope_check
+    CONFIG_PATH.write_text(yaml.dump(cfg, default_flow_style=False, allow_unicode=True), encoding="utf-8")
+
+    # Restart the container to pick up new config.
+    # Use run_in_executor + subprocess.run (same pattern as terminal.py —
+    # asyncio.create_subprocess_exec is unreliable on Windows).
+    container = get_docker_container() or "rami-kali"
+    try:
+        import subprocess as _sp
+        loop = asyncio.get_event_loop()
+        rc = await loop.run_in_executor(
+            None,
+            lambda: _sp.run(
+                ["docker", "restart", container],
+                stdout=_sp.DEVNULL,
+                stderr=_sp.DEVNULL,
+            ).returncode,
+        )
+        restart = "ok" if rc == 0 else "failed"
+    except Exception as e:
+        restart = f"failed: {e}"
+
+    # Reconnect MCP server after container restart so tools remain available.
+    if restart == "ok":
+        await asyncio.sleep(3)  # wait for container to come up
+        RAMIKALI_NAME = "rami-kali"
+        existing_conn = mcp_client.servers.get(RAMIKALI_NAME)
+        if existing_conn:
+            await existing_conn.stop()
+            await mcp_client.reconnect_server(existing_conn.config)
+
+    return {"status": "saved", "restart": restart}
 
 
 # --- Settings ---

@@ -1,77 +1,70 @@
-
-server:
-  name: "rami-kali"
-  version: "2.0.0"
-  log_file: "mcp_server.log"
-  log_level: "INFO"
-  database: "scan_results.db"
-  report_dir: "reports"
-
-security:
-  audit_log: "audit.log"
-  require_scope_check: true
-  resolve_hostnames: true
-  allowed_scope:
-    - "192.168.1.0/24"
-    - "10.0.0.0/8"
-    - "172.16.0.0/12"
-  max_command_timeout: 300
-
-tools:
-  default_timeout: 120
-  nmap_scan:
-    timeout: 300
-  msf_console:
-    timeout: 600
-  wpscan:
-    timeout: 600
-  bettercap:
-    timeout: 600
-  ettercap:
-    timeout: 600
-  responder:
-    timeout: 600
-  bloodhound:
-    timeout: 300
-  aircrack_suite:
-    timeout: 600
-  wifite:
-    timeout: 600
-  mitmproxy:
-    timeout: 600
-  kismet:
-    timeout: 600
-
-risk_levels:
-  high:
-    - sqlmap_scan
-    - hydra_attack
-    - hashcat_crack
-    - john_crack
-    - msf_console
-    - msfvenom
-    - metasploit_resource
-    - bettercap_scan
-    - responder_poison
-    - crackmapexec
-    - impacket_scripts
-    - bloodhound_enum
-    - mimikatz
-    - setoolkit
-    - beef_start
-    - ettercap_mitm
-    - aircrack_suite
-    - wifite_audit
-    - medusa_bruteforce
-    - ncrack_bruteforce
-    - wpscan
-    - zap_scan
-
+lmstudio:
+  base_url: http://10.0.2.2:11435/api/v1
+  model: local-model
+  timeout: 120
 rate_limit:
   global_max_concurrent: 3
   per_tool_max_concurrent: 1
-
-lmstudio:
-  base_url: "http://10.0.2.2:11435/api/v1"
-  model: "local-model"
-  timeout: 120
+risk_levels:
+  high:
+  - sqlmap_scan
+  - hydra_attack
+  - hashcat_crack
+  - john_crack
+  - msf_console
+  - msfvenom
+  - metasploit_resource
+  - bettercap_scan
+  - responder_poison
+  - crackmapexec
+  - impacket_scripts
+  - bloodhound_enum
+  - mimikatz
+  - setoolkit
+  - beef_start
+  - ettercap_mitm
+  - aircrack_suite
+  - wifite_audit
+  - medusa_bruteforce
+  - ncrack_bruteforce
+  - wpscan
+  - zap_scan
+security:
+  allowed_scope:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  audit_log: audit.log
+  max_command_timeout: 300
+  require_scope_check: true
+  resolve_hostnames: true
+server:
+  database: scan_results.db
+  log_file: mcp_server.log
+  log_level: INFO
+  name: rami-kali
+  report_dir: reports
+  version: 2.0.0
+tools:
+  aircrack_suite:
+    timeout: 600
+  bettercap:
+    timeout: 600
+  bloodhound:
+    timeout: 300
+  default_timeout: 120
+  ettercap:
+    timeout: 600
+  kismet:
+    timeout: 600
+  mitmproxy:
+    timeout: 600
+  msf_console:
+    timeout: 600
+  nmap_scan:
+    timeout: 300
+  responder:
+    timeout: 600
+  wifite:
+    timeout: 600
+  wpscan:
+    timeout: 600
