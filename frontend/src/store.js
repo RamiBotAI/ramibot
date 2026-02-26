@@ -457,6 +457,64 @@ const useStore = create((set, get) => ({
       console.error('Failed to export conversation:', e)
     }
   },
+
+  // ── Findings ──────────────────────────────────────────────────────────────
+  findings: [],
+
+  fetchFindings: async ({ conversationId, severity } = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (conversationId) params.set('conversation_id', conversationId)
+      if (severity) params.set('severity', severity)
+      const res = await fetch(`/api/findings?${params}`)
+      if (!res.ok) return
+      set({ findings: await res.json() })
+    } catch (e) {
+      console.error('Failed to fetch findings:', e)
+    }
+  },
+
+  createFinding: async (data) => {
+    try {
+      const res = await fetch('/api/findings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) return null
+      const finding = await res.json()
+      set((s) => ({ findings: [finding, ...s.findings] }))
+      return finding
+    } catch (e) {
+      console.error('Failed to create finding:', e)
+      return null
+    }
+  },
+
+  deleteFinding: async (id) => {
+    try {
+      await fetch(`/api/findings/${id}`, { method: 'DELETE' })
+      set((s) => ({ findings: s.findings.filter((f) => f.id !== id) }))
+    } catch (e) {
+      console.error('Failed to delete finding:', e)
+    }
+  },
+
+  exportFindings: async (format = 'json') => {
+    try {
+      const res = await fetch(`/api/findings/export?format=${format}`)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `findings.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Failed to export findings:', e)
+    }
+  },
 }))
 
 export default useStore

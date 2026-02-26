@@ -27,6 +27,9 @@ from db.database import (
     save_message,
     update_conversation,
     delete_conversation,
+    create_finding,
+    get_findings,
+    delete_finding,
 )
 from adapters import ADAPTERS
 from mcp.client import MCPClient, MCPServer
@@ -71,6 +74,22 @@ def _format_tool_result(result) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result)
+
+
+def _format_tool_content(trace: dict) -> str:
+    """Return the content string to inject into the follow-up history.
+
+    If the tool errored, return an explicit error notice so the LLM does NOT
+    fabricate output. If it succeeded, return the formatted result.
+    """
+    if "error" in trace:
+        return (
+            f"[TOOL EXECUTION FAILED]: {trace['error']}\n"
+            "The tool did not run successfully. "
+            "Do NOT invent or fabricate output. "
+            "Inform the user of the error and suggest how to fix it."
+        )
+    return _format_tool_result(trace.get("result", ""))
 
 mcp_client = MCPClient()
 
@@ -163,7 +182,7 @@ async def lifespan(app: FastAPI):
     await mcp_client.shutdown()
 
 
-app = FastAPI(title="RamiBot API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="RamiBot API", version="3.3", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -213,6 +232,15 @@ class MCPCallRequest(BaseModel):
 class ScopeUpdate(BaseModel):
     allowed_scope: list[str]
     require_scope_check: bool = True
+
+
+class FindingCreate(BaseModel):
+    conversation_id: str | None = None
+    tool: str
+    severity: str = "info"
+    title: str
+    description: str = ""
+    target: str = ""
 
 
 # --- Health ---
@@ -370,11 +398,10 @@ async def chat(body: ChatRequest):
             # Send tool results with role: "tool" and matching tool_call_id
             for i, trace in enumerate(tool_traces):
                 tc_id = tool_calls_data[i].get("id", f"call_{i}") if i < len(tool_calls_data) else f"call_{i}"
-                text = _format_tool_result(trace.get("result", trace.get("error", "")))
                 history.append({
                     "role": "tool",
                     "tool_call_id": tc_id,
-                    "content": text,
+                    "content": _format_tool_content(trace),
                 })
 
             follow_kwargs = {k: v for k, v in kwargs.items() if k != "tools"}
@@ -490,11 +517,10 @@ async def chat_stream(body: ChatRequest):
                 # Send tool results with role: "tool" and matching tool_call_id
                 for i, trace in enumerate(tool_traces):
                     tc_id = tool_calls_collected[i].get("id", f"call_{i}") if i < len(tool_calls_collected) else f"call_{i}"
-                    text = _format_tool_result(trace.get("result", trace.get("error", "")))
                     follow_history.append({
                         "role": "tool",
                         "tool_call_id": tc_id,
-                        "content": text,
+                        "content": _format_tool_content(trace),
                     })
 
                 content_parts.clear()
@@ -784,3 +810,57 @@ async def save_settings(request: Request):
     if docker_cfg:
         set_docker_container(docker_cfg.get("container", ""))
     return {"status": "saved"}
+
+
+# --- Findings ---
+
+@app.post("/api/findings")
+async def api_create_finding(body: FindingCreate):
+    finding = await create_finding(
+        conversation_id=body.conversation_id,
+        tool=body.tool,
+        severity=body.severity,
+        title=body.title,
+        description=body.description,
+        target=body.target,
+    )
+    return finding
+
+
+@app.get("/api/findings")
+async def api_get_findings(
+    conversation_id: str | None = Query(None),
+    severity: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    return await get_findings(conversation_id=conversation_id, severity=severity, limit=limit)
+
+
+@app.delete("/api/findings/{finding_id}")
+async def api_delete_finding(finding_id: str):
+    deleted = await delete_finding(finding_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return {"status": "deleted"}
+
+
+@app.get("/api/findings/export")
+async def api_export_findings(
+    format: str = Query("json"),
+    conversation_id: str | None = Query(None),
+    severity: str | None = Query(None),
+):
+    from fastapi.responses import Response
+    findings = await get_findings(conversation_id=conversation_id, severity=severity, limit=10000)
+
+    if format == "csv":
+        import io, csv
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=["id", "created_at", "severity", "title", "tool", "target", "description", "conversation_id"])
+        writer.writeheader()
+        writer.writerows(findings)
+        return Response(content=buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=findings.csv"})
+
+    return Response(content=json.dumps(findings, indent=2), media_type="application/json",
+                    headers={"Content-Disposition": "attachment; filename=findings.json"})

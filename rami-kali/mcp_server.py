@@ -550,8 +550,17 @@ class ToolRegistry:
                 "target": {"type": "string", "description": "IP, CIDR, or hostname to scan."},
                 "scan_type": {
                     "type": "string",
-                    "enum": ["quick", "full", "stealth", "vuln", "scripts"],
-                    "description": "Predefined scan profile.",
+                    "enum": ["quick", "full", "stealth", "vuln", "scripts", "discovery", "udp"],
+                    "description": (
+                        "Scan profile: "
+                        "quick=-sS -sV --top-ports 1000; "
+                        "full=-sS -sV -sC -p-; "
+                        "stealth=-sS -sV (SYN only); "
+                        "vuln=-sS -sV --script vuln; "
+                        "scripts=-sS -sV -sC; "
+                        "discovery=-sn (host-only, NO port scan — use for subnets); "
+                        "udp=-sU --top-ports 50."
+                    ),
                     "default": "quick",
                 },
                 "ports": {"type": "string", "description": "Port specification (e.g. '80,443' or '1-1024')."},
@@ -2090,20 +2099,49 @@ class ToolExecutor:
         extra = args.get("extra_args", "")
 
         scan_flags = {
-            "quick": ["-sV", "--top-ports", "1000"],
-            "full": ["-sV", "-sC", "-p-"],
-            "stealth": ["-sS", "-sV"],
-            "vuln": ["-sV", "--script", "vuln"],
-            "scripts": ["-sV", "-sC"],
-        }.get(scan_type, ["-sV"])
+            "quick":     ["-sS", "-sV", "--top-ports", "1000"],
+            "full":      ["-sS", "-sV", "-sC", "-p-"],
+            "stealth":   ["-sS", "-sV"],
+            "vuln":      ["-sS", "-sV", "--script", "vuln"],
+            "scripts":   ["-sS", "-sV", "-sC"],
+            "discovery": ["-sn"],
+            "udp":       ["-sU", "--top-ports", "50"],
+        }.get(scan_type, ["-sS", "-sV"])
 
-        cmd: list[str] = ["nmap"] + scan_flags + [f"-{timing}"]
-        if ports:
-            cmd += ["-p", InputSanitizer.sanitize_generic(ports)]
-        if scripts and scan_type != "vuln":
-            cmd += ["--script", InputSanitizer.sanitize_generic(scripts)]
+        # Bug 3: if ports is specified (or extra_args contains -p), strip conflicting
+        # scan_type flags (-p- and --top-ports N) so nmap doesn't get two -p options.
+        flags = list(scan_flags)
+        has_port_conflict = bool(ports) or bool(extra and re.search(r'(?<!\w)-p[ \-]', extra))
+        if has_port_conflict:
+            clean: list[str] = []
+            skip_next = False
+            for f in flags:
+                if skip_next:
+                    skip_next = False
+                    continue
+                if f == "-p-":
+                    continue
+                if f == "--top-ports":
+                    skip_next = True
+                    continue
+                clean.append(f)
+            flags = clean
+
+        cmd: list[str] = ["nmap"] + flags + [f"-{timing}"]
+
+        # discovery mode: no ports, no scripts
+        if scan_type != "discovery":
+            if ports:
+                cmd += ["-p", InputSanitizer.sanitize_generic(ports)]
+            if scripts and scan_type not in ("vuln",):
+                cmd += ["--script", InputSanitizer.sanitize_generic(scripts)]
+
         if extra:
-            cmd += shlex.split(InputSanitizer.sanitize_generic(extra))
+            try:  # Bug 4: shlex.split raises ValueError on unbalanced quotes
+                cmd += shlex.split(InputSanitizer.sanitize_generic(extra))
+            except ValueError as e:
+                return self._error(f"Invalid extra_args: {e}")
+
         cmd += [target, "-oX", "-"]
 
         stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("nmap"))
@@ -2111,6 +2149,10 @@ class ToolExecutor:
         parsed = OutputParsers.parse_nmap_xml(stdout)
         if parsed:
             return self._ok(json.dumps(parsed, indent=2))
+
+        # Bug 5: surface stderr when nmap exits non-zero so the LLM sees the real error
+        if rc != 0:
+            return self._ok(f"[NMAP ERROR rc={rc}]:\n{stderr}\n{stdout}".strip())
         return self._ok(stdout if stdout else stderr)
 
     async def _tool_nikto_scan(self, args: dict) -> dict:
@@ -3284,7 +3326,7 @@ class MCPServer:
 
     PROTOCOL_VERSION = "2024-11-05"
     SERVER_NAME = "rami-kali"
-    SERVER_VERSION = "2.0.0"
+    SERVER_VERSION = "3.3"
 
     def __init__(self) -> None:
         self._config = load_config()

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Loader } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Loader, Flag } from 'lucide-react'
+import FindingModal from './FindingModal'
 
 function ToolTrace({ traces }) {
   const [expanded, setExpanded] = useState(false)
@@ -38,6 +39,7 @@ function ToolTrace({ traces }) {
 
 function TraceItem({ trace }) {
   const [showDetails, setShowDetails] = useState(false)
+  const [findingOpen, setFindingOpen] = useState(false)
 
   const statusColor = trace.status === 'done'
     ? '#22c55e'
@@ -128,8 +130,38 @@ function TraceItem({ trace }) {
               </pre>
             </div>
           )}
+
+          {/* Save as Finding */}
+          {trace.status === 'done' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.1rem' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setFindingOpen(true) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  padding: '0.25rem 0.55rem',
+                  background: 'transparent',
+                  border: '1px solid var(--bd)', borderRadius: 0, cursor: 'pointer',
+                  fontFamily: 'var(--font-display)', fontSize: '0.5rem',
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  color: 'var(--t3)', transition: 'all 0.12s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = `rgb(var(--accent))`
+                  e.currentTarget.style.borderColor = `rgb(var(--accent)/0.5)`
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--t3)'
+                  e.currentTarget.style.borderColor = 'var(--bd)'
+                }}
+              >
+                <Flag size={9} /> SAVE AS FINDING
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      {findingOpen && <FindingModal trace={trace} onClose={() => setFindingOpen(false)} />}
     </div>
   )
 }

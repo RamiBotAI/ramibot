@@ -14,27 +14,21 @@ Discovers hosts, open ports, services, versions, OS. Foundation of all recon.
 | Specific port check | `-p <port>` |
 | Subnet given | `-sn` first (host discovery only) |
 
-## Common Invocations
+## Tool Usage (use nmap_scan parameters — do NOT pass raw flags via extra_args)
 
-```bash
-# Full recon on single host (standard start)
-nmap -sS -sV -sC -O -p- <target>
+| Goal | scan_type | ports | extra_args |
+|---|---|---|---|
+| Subnet host discovery | `"discovery"` | — | — |
+| Full single-host recon | `"full"` | — | `"-O"` for OS |
+| Quick top-1000 ports | `"quick"` | — | — |
+| Vuln hints on known ports | `"vuln"` | `"80,443"` | — |
+| UDP (SNMP/DNS/TFTP) | `"udp"` | — | — |
+| Specific port deep dive | `"scripts"` | `"22,80,443"` | — |
 
-# Host discovery on subnet (ALWAYS first for ranges)
-nmap -sn <cidr>
-
-# Quick top ports
-nmap -sS --top-ports 1000 <target>
-
-# UDP scan (slow but necessary for SNMP/DNS/TFTP)
-nmap -sU --top-ports 50 <target>
-
-# Specific port deep dive
-nmap -sV -sC -p <port> <target>
-
-# Vuln scan (noisy)
-nmap --script vuln -p <ports> <target>
-```
+**Rules:**
+- Always use `scan_type="discovery"` first for CIDRs/subnets before any port scan.
+- Do **not** pass `-sV`, `-sC`, `-p-`, or `--top-ports` via `extra_args` — they are already included in the scan_type profile and will conflict.
+- Only use `extra_args` for flags not covered by the parameters (e.g. `-O`, `--osscan-guess`, `-6`).
 
 ## Parsing Priorities
 

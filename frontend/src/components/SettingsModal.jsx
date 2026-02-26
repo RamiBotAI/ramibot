@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import useStore from '../store'
-import { X, Key, Globe, Save, Wrench, Plus, Trash2, Terminal, Link, Shield, Tv2, Container, Activity, RefreshCw, Trash, Crosshair } from 'lucide-react'
+import { X, Key, Globe, Save, Wrench, Plus, Trash2, Terminal, Link, Shield, Tv2, Container, Activity, RefreshCw, Trash, Crosshair, Flag, Download } from 'lucide-react'
 
 /* ── Shared input styles ─────────────────────────────── */
 const fieldInput = {
@@ -630,6 +630,165 @@ function PanelSkillLog() {
   )
 }
 
+/* ── Findings panel ──────────────────────────────────── */
+const SEVERITY_META = {
+  info:     { label: 'INFO',     color: '#60a5fa' },
+  low:      { label: 'LOW',      color: '#22c55e' },
+  medium:   { label: 'MEDIUM',   color: '#fbbf24' },
+  high:     { label: 'HIGH',     color: '#f97316' },
+  critical: { label: 'CRITICAL', color: '#ff3250' },
+}
+
+function PanelFindings() {
+  const findings = useStore((s) => s.findings)
+  const fetchFindings = useStore((s) => s.fetchFindings)
+  const deleteFinding = useStore((s) => s.deleteFinding)
+  const exportFindings = useStore((s) => s.exportFindings)
+  const [loading, setLoading] = useState(false)
+  const [filterSev, setFilterSev] = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    await fetchFindings({ severity: filterSev || undefined })
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [filterSev])
+
+  const formatTime = (iso) => {
+    try {
+      const d = new Date(iso)
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) +
+        ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } catch { return iso }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.55rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--t2)' }}>
+          {findings.length} FINDING{findings.length !== 1 ? 'S' : ''}
+        </span>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {/* Severity filter */}
+          <select
+            value={filterSev}
+            onChange={(e) => setFilterSev(e.target.value)}
+            style={{
+              background: 'var(--surface-2)', border: '1px solid var(--bd)', borderRadius: 0,
+              padding: '0.22rem 0.5rem', fontSize: '0.6rem',
+              fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--t2)', cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="">ALL SEVERITIES</option>
+            {Object.entries(SEVERITY_META).map(([id, { label }]) => (
+              <option key={id} value={id}>{label}</option>
+            ))}
+          </select>
+
+          <button onClick={load} disabled={loading} style={{
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            padding: '0.25rem 0.6rem', background: 'transparent',
+            border: '1px solid var(--bd)', cursor: 'pointer',
+            fontFamily: 'var(--font-display)', fontSize: '0.55rem',
+            letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t2)',
+          }}>
+            <RefreshCw size={10} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            REFRESH
+          </button>
+          <button onClick={() => exportFindings('json')} style={{
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            padding: '0.25rem 0.6rem', background: 'transparent',
+            border: '1px solid var(--bd)', cursor: 'pointer',
+            fontFamily: 'var(--font-display)', fontSize: '0.55rem',
+            letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t2)',
+          }}>
+            <Download size={10} /> JSON
+          </button>
+          <button onClick={() => exportFindings('csv')} style={{
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            padding: '0.25rem 0.6rem', background: 'transparent',
+            border: '1px solid var(--bd)', cursor: 'pointer',
+            fontFamily: 'var(--font-display)', fontSize: '0.55rem',
+            letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t2)',
+          }}>
+            <Download size={10} /> CSV
+          </button>
+        </div>
+      </div>
+
+      {findings.length === 0 && !loading && (
+        <div style={{
+          padding: '2rem', textAlign: 'center',
+          fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
+          color: 'var(--t3)', border: '1px dashed var(--bd)',
+        }}>
+          No findings saved yet.<br />
+          <span style={{ fontSize: '0.65rem' }}>
+            Expand a tool result and click &ldquo;Save as Finding&rdquo;.
+          </span>
+        </div>
+      )}
+
+      {findings.map((f) => {
+        const sev = SEVERITY_META[f.severity] || SEVERITY_META.info
+        return (
+          <div key={f.id} style={{
+            border: '1px solid var(--bd)',
+            borderLeft: `2px solid ${sev.color}`,
+            background: 'var(--surface)',
+            padding: '0.55rem 0.7rem',
+            fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* Row 1: severity + tool + time */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                  <span style={{
+                    padding: '0.05rem 0.35rem', fontSize: '0.52rem',
+                    fontFamily: 'var(--font-display)', letterSpacing: '0.12em', textTransform: 'uppercase',
+                    color: sev.color, border: `1px solid ${sev.color}40`,
+                  }}>{sev.label}</span>
+                  <span style={{ color: `rgb(var(--accent))`, fontSize: '0.65rem' }}>{f.tool}</span>
+                  {f.target && (
+                    <span style={{ color: 'var(--t3)', fontSize: '0.62rem' }}>→ {f.target}</span>
+                  )}
+                  <span style={{ color: 'var(--t3)', fontSize: '0.58rem', marginLeft: 'auto' }}>{formatTime(f.created_at)}</span>
+                </div>
+                {/* Title */}
+                <div style={{ color: 'var(--t1)', fontSize: '0.73rem', fontWeight: 600, marginBottom: '0.2rem' }}>
+                  {f.title}
+                </div>
+                {/* Description preview */}
+                {f.description && (
+                  <div style={{
+                    color: 'var(--t2)', fontSize: '0.65rem', lineHeight: 1.45,
+                    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  }}>
+                    {f.description}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => deleteFinding(f.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', flexShrink: 0, padding: '0.1rem', lineHeight: 0, transition: 'color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#ff3250'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--t3)'}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+
 /* ── Main modal ──────────────────────────────────────── */
 function SettingsModal({ onClose }) {
   const { settings, saveSettings, setDockerContainer, matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed } = useStore()
@@ -659,6 +818,7 @@ function SettingsModal({ onClose }) {
     { id: 'mcp',       label: 'MCP',        icon: Wrench },
     { id: 'scope',     label: 'Scope',      icon: Crosshair },
     { id: 'skilllog',  label: 'Skill Log',  icon: Activity },
+    { id: 'findings',  label: 'Findings',   icon: Flag },
   ]
 
   return (
@@ -732,6 +892,7 @@ function SettingsModal({ onClose }) {
             {activeTab === 'mcp'     && <PanelMcp />}
             {activeTab === 'scope'   && <PanelScope />}
             {activeTab === 'skilllog' && <PanelSkillLog />}
+            {activeTab === 'findings' && <PanelFindings />}
           </div>
         </div>
 

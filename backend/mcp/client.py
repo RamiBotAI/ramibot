@@ -149,9 +149,9 @@ class MCPServerConnection:
             self.process.stdin.write(data.encode())
             self.process.stdin.flush()
 
-    async def _send_request(self, method: str, params: dict | None = None) -> dict:
+    async def _send_request(self, method: str, params: dict | None = None, timeout: float = 30.0) -> dict:
         if self.config.url:
-            return await self._send_http_request(method, params)
+            return await self._send_http_request(method, params, timeout=timeout)
 
         if not self.process or not self.process.stdin:
             raise RuntimeError(f"MCP server '{self.config.name}' not running")
@@ -174,7 +174,7 @@ class MCPServerConnection:
         self._write_stdin(data)
 
         try:
-            result = await asyncio.wait_for(future, timeout=30)
+            result = await asyncio.wait_for(future, timeout=timeout)
         finally:
             self._pending.pop(req_id, None)
 
@@ -182,7 +182,7 @@ class MCPServerConnection:
             raise RuntimeError(f"MCP error: {result['error']}")
         return result.get("result", {})
 
-    async def _send_http_request(self, method: str, params: dict | None = None) -> dict:
+    async def _send_http_request(self, method: str, params: dict | None = None, timeout: float = 30.0) -> dict:
         request = {
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
@@ -191,7 +191,7 @@ class MCPServerConnection:
         if params:
             request["params"] = params
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(self.config.url, json=request)
             resp.raise_for_status()
             data = resp.json()
@@ -209,10 +209,12 @@ class MCPServerConnection:
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         if not self._initialized:
             raise RuntimeError(f"MCP server '{self.config.name}' not initialized")
+        # Use a long timeout: the MCP server enforces its own per-tool timeouts
+        # (up to 1600 s for msf_console). We add 100 s of headroom.
         result = await self._send_request("tools/call", {
             "name": tool_name,
             "arguments": arguments,
-        })
+        }, timeout=1700.0)
         return result
 
     async def stop(self):
