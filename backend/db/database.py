@@ -60,6 +60,18 @@ async def init_db():
             synced_at TEXT,
             PRIMARY KEY (server_name, name)
         );
+
+        CREATE TABLE IF NOT EXISTS findings (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT,
+            tool TEXT,
+            severity TEXT DEFAULT 'info',
+            title TEXT,
+            description TEXT,
+            target TEXT,
+            created_at TEXT,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL
+        );
     """)
     await _db_connection.commit()
 
@@ -257,3 +269,65 @@ async def sync_server_tools(server_name: str, tools: list[dict]) -> None:
             ),
         )
     await db.commit()
+
+
+# ── Findings ──────────────────────────────────────────────────────────────────
+
+async def create_finding(
+    conversation_id: str | None,
+    tool: str,
+    severity: str,
+    title: str,
+    description: str,
+    target: str,
+) -> dict:
+    db = await get_db()
+    finding_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute(
+        """INSERT INTO findings (id, conversation_id, tool, severity, title, description, target, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (finding_id, conversation_id, tool, severity, title, description, target, now),
+    )
+    await db.commit()
+    return {
+        "id": finding_id,
+        "conversation_id": conversation_id,
+        "tool": tool,
+        "severity": severity,
+        "title": title,
+        "description": description,
+        "target": target,
+        "created_at": now,
+    }
+
+
+async def get_findings(
+    conversation_id: str | None = None,
+    severity: str | None = None,
+    limit: int = 200,
+) -> list[dict]:
+    db = await get_db()
+    conditions = []
+    params: list = []
+    if conversation_id:
+        conditions.append("conversation_id = ?")
+        params.append(conversation_id)
+    if severity:
+        conditions.append("severity = ?")
+        params.append(severity)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    params.append(limit)
+    cursor = await db.execute(
+        f"SELECT * FROM findings {where} ORDER BY created_at DESC LIMIT ?",
+        params,
+    )
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def delete_finding(finding_id: str) -> bool:
+    db = await get_db()
+    cursor = await db.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
+    await db.commit()
+    return cursor.rowcount > 0

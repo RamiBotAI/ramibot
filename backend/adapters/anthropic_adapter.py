@@ -56,14 +56,63 @@ class AnthropicAdapter(BaseAdapter):
         ]
 
     def _convert_messages(self, messages: list[dict]) -> tuple[str | None, list[dict]]:
-        """Split system message from conversation messages and convert to Anthropic format."""
+        """Split system message and convert to Anthropic format.
+
+        Handles OpenAI-style tool_calls / role:'tool' messages produced by the
+        follow-up flow in main.py, converting them to Anthropic's tool_use /
+        tool_result block format.
+        """
         system = None
         converted = []
         for msg in messages:
-            if msg["role"] == "system":
+            role = msg["role"]
+
+            if role == "system":
                 system = msg["content"]
-            else:
-                converted.append({"role": msg["role"], "content": msg["content"]})
+                continue
+
+            # OpenAI-style assistant message with tool_calls → Anthropic tool_use blocks
+            if role == "assistant" and msg.get("tool_calls"):
+                content_blocks: list[dict] = []
+                if msg.get("content"):
+                    content_blocks.append({"type": "text", "text": msg["content"]})
+                for tc in msg["tool_calls"]:
+                    fn = tc.get("function", {})
+                    try:
+                        tool_input = (
+                            json.loads(fn.get("arguments", "{}"))
+                            if isinstance(fn.get("arguments"), str)
+                            else fn.get("arguments", {})
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        tool_input = {}
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": fn["name"],
+                        "input": tool_input,
+                    })
+                converted.append({"role": "assistant", "content": content_blocks})
+                continue
+
+            # OpenAI-style role:'tool' → Anthropic tool_result inside a user message
+            if role == "tool":
+                result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": msg.get("tool_call_id", ""),
+                    "content": msg.get("content", ""),
+                }
+                # Consolidate consecutive tool results into one user message
+                if (converted and converted[-1]["role"] == "user"
+                        and isinstance(converted[-1]["content"], list)):
+                    converted[-1]["content"].append(result_block)
+                else:
+                    converted.append({"role": "user", "content": [result_block]})
+                continue
+
+            # Regular user/assistant message
+            converted.append({"role": role, "content": msg.get("content", "")})
+
         return system, converted
 
     def _build_tools(self, tools: list[dict] | None) -> list[dict] | None:

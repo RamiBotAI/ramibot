@@ -1,7 +1,7 @@
 lmstudio:
   base_url: http://10.0.2.2:11435/api/v1
   model: local-model
-  timeout: 120
+  timeout: 320
 rate_limit:
   global_max_concurrent: 3
   per_tool_max_concurrent: 1
@@ -31,10 +31,11 @@ risk_levels:
   - zap_scan
 security:
   allowed_scope:
+  - 192.168.1.0/24
   - 10.0.0.0/8
   - 172.16.0.0/12
   audit_log: audit.log
-  max_command_timeout: 300
+  max_command_timeout: 1300
   require_scope_check: true
   resolve_hostnames: true
 server:
@@ -51,7 +52,7 @@ tools:
     timeout: 600
   bloodhound:
     timeout: 300
-  default_timeout: 120
+  default_timeout: 620
   ettercap:
     timeout: 600
   kismet:
@@ -59,9 +60,9 @@ tools:
   mitmproxy:
     timeout: 600
   msf_console:
-    timeout: 600
-  nmap_scan:
-    timeout: 300
+    timeout: 1600
+  nmap:
+    timeout: 900
   responder:
     timeout: 600
   wifite:
