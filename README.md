@@ -26,7 +26,7 @@
 </p>
 
 
-# RamiBot v3.2
+# RamiBot v3.3
 
 A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, and Tor transparent proxy management.
 
