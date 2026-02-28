@@ -38,43 +38,41 @@ function MatrixRain() {
     const observer = new ResizeObserver(resize)
     observer.observe(canvas.parentElement)
 
-    const draw = () => {
-      ctx.fillStyle = 'rgba(17, 24, 39, 0.08)'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    const accentColor = torActive
+      ? '#8608fd'
+      : teamMode === 'blue' ? '#00b8ff' : '#ff3250'
 
-      const color = torActive
-        ? '134, 8, 253'
-        : teamMode === 'blue' ? '0, 184, 255' : '255, 50, 80'
+    // frame-rate cap: map speed 1-10 → 120ms…33ms per frame (~8fps…30fps)
+    let last = 0
 
-      ctx.font = `${fontSize}px monospace`
+    const draw = (ts) => {
+      const interval = 130 - speedRef.current * 10
+      if (ts - last > interval) {
+        last = ts
 
-      // Map speed 1-10 → actual step per frame (0.02 … 0.5)
-      const step = speedRef.current * 0.05
+        ctx.fillStyle = 'rgba(17, 24, 39, 0.05)'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      for (let i = 0; i < columns.length; i++) {
-        const char = CHARS[Math.floor(Math.random() * CHARS.length)]
-        const x = i * fontSize
-        const y = columns[i] * fontSize
+        ctx.font = `${fontSize}px 'JetBrains Mono', monospace`
 
-        const headAlpha = 0.9
-        const tailAlpha = 0.3 + Math.random() * 0.3
+        for (let i = 0; i < columns.length; i++) {
+          const char = CHARS[Math.floor(Math.random() * CHARS.length)]
+          const bright = Math.random() > 0.97
 
-        ctx.fillStyle = Math.random() > 0.5
-          ? `rgba(${color}, ${headAlpha})`
-          : `rgba(${color}, ${tailAlpha})`
+          ctx.fillStyle = bright ? '#ffffff' : accentColor
+          ctx.fillText(char, i * fontSize, columns[i] * fontSize)
 
-        ctx.fillText(char, x, y)
-
-        if (y > canvas.height && Math.random() > 0.0975) {
-          columns[i] = 0
+          if (columns[i] * fontSize > canvas.height && Math.random() > 0.975) {
+            columns[i] = 0
+          }
+          columns[i]++
         }
-        columns[i] += step + Math.random() * step
       }
 
       animationId = requestAnimationFrame(draw)
     }
 
-    draw()
+    draw(0)
 
     return () => {
       window.removeEventListener('resize', resize)
