@@ -631,6 +631,29 @@ function PanelSkillLog() {
 }
 
 /* ── Findings panel ──────────────────────────────────── */
+function exportSingleFinding(finding, format) {
+  let content, mime, ext
+  if (format === 'csv') {
+    const fields = ['id', 'created_at', 'severity', 'title', 'tool', 'target', 'description', 'conversation_id']
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    content = fields.join(',') + '\n' + fields.map((f) => esc(finding[f])).join(',')
+    mime = 'text/csv'
+    ext = 'csv'
+  } else {
+    content = JSON.stringify(finding, null, 2)
+    mime = 'application/json'
+    ext = 'json'
+  }
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const slug = (finding.title || finding.id).replace(/[^a-z0-9]+/gi, '_').slice(0, 40).toLowerCase()
+  a.href = url
+  a.download = `finding_${slug}.${ext}`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const SEVERITY_META = {
   info:     { label: 'INFO',     color: '#60a5fa' },
   low:      { label: 'LOW',      color: '#22c55e' },
@@ -646,6 +669,7 @@ function PanelFindings() {
   const exportFindings = useStore((s) => s.exportFindings)
   const [loading, setLoading] = useState(false)
   const [filterSev, setFilterSev] = useState('')
+  const [expandedId, setExpandedId] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -698,7 +722,7 @@ function PanelFindings() {
             <RefreshCw size={10} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             REFRESH
           </button>
-          <button onClick={() => exportFindings('json')} style={{
+          <button onClick={() => exportFindings('json', { severity: filterSev || undefined })} style={{
             display: 'flex', alignItems: 'center', gap: '0.3rem',
             padding: '0.25rem 0.6rem', background: 'transparent',
             border: '1px solid var(--bd)', cursor: 'pointer',
@@ -707,7 +731,7 @@ function PanelFindings() {
           }}>
             <Download size={10} /> JSON
           </button>
-          <button onClick={() => exportFindings('csv')} style={{
+          <button onClick={() => exportFindings('csv', { severity: filterSev || undefined })} style={{
             display: 'flex', alignItems: 'center', gap: '0.3rem',
             padding: '0.25rem 0.6rem', background: 'transparent',
             border: '1px solid var(--bd)', cursor: 'pointer',
@@ -734,6 +758,8 @@ function PanelFindings() {
 
       {findings.map((f) => {
         const sev = SEVERITY_META[f.severity] || SEVERITY_META.info
+        const isExpanded = expandedId === f.id
+        const longDesc = f.description && f.description.length > 180
         return (
           <div key={f.id} style={{
             border: '1px solid var(--bd)',
@@ -761,25 +787,66 @@ function PanelFindings() {
                 <div style={{ color: 'var(--t1)', fontSize: '0.73rem', fontWeight: 600, marginBottom: '0.2rem' }}>
                   {f.title}
                 </div>
-                {/* Description preview */}
+                {/* Description */}
                 {f.description && (
-                  <div style={{
-                    color: 'var(--t2)', fontSize: '0.65rem', lineHeight: 1.45,
-                    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                  }}>
-                    {f.description}
+                  <div>
+                    <div style={{
+                      color: 'var(--t2)', fontSize: '0.65rem', lineHeight: 1.45,
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      ...(!isExpanded && longDesc ? {
+                        display: '-webkit-box', WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      } : {}),
+                    }}>
+                      {f.description}
+                    </div>
+                    {longDesc && (
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : f.id)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          fontFamily: 'var(--font-display)', fontSize: '0.5rem',
+                          letterSpacing: '0.12em', textTransform: 'uppercase',
+                          color: `rgb(var(--accent)/0.7)`, padding: '0.2rem 0 0',
+                          transition: 'color 0.12s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = `rgb(var(--accent))`}
+                        onMouseLeave={e => e.currentTarget.style.color = `rgb(var(--accent)/0.7)`}
+                      >
+                        {isExpanded ? '▲ SHOW LESS' : '▼ SHOW MORE'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => deleteFinding(f.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', flexShrink: 0, padding: '0.1rem', lineHeight: 0, transition: 'color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.color = '#ff3250'}
-                onMouseLeave={e => e.currentTarget.style.color = 'var(--t3)'}
-              >
-                <Trash2 size={13} />
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                {['json', 'csv'].map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => exportSingleFinding(f, fmt)}
+                    title={`Export as ${fmt.toUpperCase()}`}
+                    style={{
+                      background: 'none', border: '1px solid var(--bd)', cursor: 'pointer',
+                      color: 'var(--t3)', padding: '0.15rem 0.3rem', lineHeight: 1,
+                      fontFamily: 'var(--font-display)', fontSize: '0.42rem',
+                      letterSpacing: '0.1em', textTransform: 'uppercase',
+                      transition: 'color 0.12s, border-color 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--t1)'; e.currentTarget.style.borderColor = 'var(--t2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--t3)'; e.currentTarget.style.borderColor = 'var(--bd)' }}
+                  >
+                    {fmt}
+                  </button>
+                ))}
+                <button
+                  onClick={() => deleteFinding(f.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '0.1rem', lineHeight: 0, transition: 'color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#ff3250'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--t3)'}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           </div>
         )

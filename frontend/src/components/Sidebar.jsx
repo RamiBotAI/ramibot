@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import useStore from '../store'
 import {
   Plus, X, Settings, PanelLeftClose, PanelLeftOpen,
-  Cpu, Brain, Wrench, ChevronDown, ChevronRight, Pencil, List, Swords, ShieldCheck,
+  Cpu, Brain, Wrench, ChevronDown, ChevronRight, Pencil, List, Swords, ShieldCheck, ShieldAlert,
 } from 'lucide-react'
 
 /* ── shared micro-styles ─────────────────────────── */
@@ -85,6 +85,7 @@ function Sidebar({ onOpenSettings }) {
     providers, models, selectedProvider, selectedModel, mcpEnabled, reasoningEnabled,
     setProvider, setModel, toggleMcp, toggleReasoning, sidebarOpen, toggleSidebar,
     fetchModels, mcpTools, fetchMcpTools, disabledMcpTools, toggleMcpTool, teamMode, setTeamMode,
+    requireToolApproval, toggleRequireApproval,
   } = useStore()
 
   const [mcpToolsExpanded, setMcpToolsExpanded] = useState(false)
@@ -458,6 +459,16 @@ function Sidebar({ onOpenSettings }) {
               </div>
             )}
           </div>
+
+          {/* Approval Mode (only when MCP is active) */}
+          {mcpEnabled && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ ...sectionLabel, marginBottom: 0 }}>
+                <ShieldAlert size={9} /> Approval Mode
+              </div>
+              <Toggle on={requireToolApproval} onClick={toggleRequireApproval} />
+            </div>
+          )}
 
           {/* Reasoning */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -1,4 +1,7 @@
 import { create } from 'zustand'
+import { exportReportAsPdf } from './reportPdf'
+
+const PDF_CONFIRM_RE = /^(pdf|sí|si|yes|dale|ok|quiero|quiero pdf|sí quiero|si quiero|exportar pdf|descargar pdf|export pdf|download pdf|generate pdf|generar pdf|sí,?\s*por favor|si,?\s*por favor)$/i
 
 const useStore = create((set, get) => ({
   conversations: [],
@@ -10,6 +13,8 @@ const useStore = create((set, get) => ({
   selectedModel: '',
   mcpEnabled: false,
   reasoningEnabled: false,
+  requireToolApproval: localStorage.getItem('ramibot_require_approval') === 'true',
+  pendingApproval: null,
   isStreaming: false,
   streamingContent: '',
   streamingToolTraces: [],
@@ -155,6 +160,32 @@ const useStore = create((set, get) => ({
 
   sendMessageStream: async (content) => {
     const state = get()
+
+    // ── PDF export intercept ─────────────────────────────────────────────────
+    if (PDF_CONFIRM_RE.test(content.trim())) {
+      const lastReport = [...state.messages].reverse().find(
+        (m) => m.role === 'assistant' && m.content?.includes('<!-- REPORT -->')
+      )
+      if (lastReport) {
+        const userMsg = {
+          id: Date.now().toString(),
+          role: 'user',
+          content,
+          created_at: new Date().toISOString(),
+        }
+        const ackMsg = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '✓ Abriendo ventana de impresión — selecciona **Guardar como PDF** en tu navegador.',
+          created_at: new Date().toISOString(),
+        }
+        set((s) => ({ messages: [...s.messages, userMsg, ackMsg] }))
+        exportReportAsPdf(lastReport.content)
+        return
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     let convId = state.currentConversation?.id
 
     if (!convId) {
@@ -191,6 +222,7 @@ const useStore = create((set, get) => ({
         reasoning_enabled: get().reasoningEnabled,
         team_mode: get().teamMode,
         disabled_tools: get().disabledMcpTools,
+        require_tool_approval: get().requireToolApproval,
       }
 
       const headers = { 'Content-Type': 'application/json' }
@@ -262,6 +294,17 @@ const useStore = create((set, get) => ({
                 )
                 set({ streamingToolTraces: toolTraces })
                 break
+              case 'tool_approval_required':
+                set({
+                  pendingApproval: {
+                    approvalId: data.approval_id,
+                    toolName: data.tool_name,
+                    arguments: data.arguments,
+                    riskLevel: data.risk_level,
+                    startedAt: Date.now(),
+                  },
+                })
+                break
               case 'clear_content':
                 fullContent = ''
                 set({ streamingContent: '' })
@@ -270,6 +313,31 @@ const useStore = create((set, get) => ({
                 usage = data
                 break
               case 'done': {
+                // If the LLM responded with the PDF export marker, trigger export
+                if (fullContent.trim() === '[PDF_EXPORT]') {
+                  const lastReport = [...get().messages].reverse().find(
+                    (m) => m.role === 'assistant' && m.content?.includes('<!-- REPORT -->')
+                  )
+                  const ackContent = '✓ Abriendo ventana de impresión — selecciona **Guardar como PDF** en tu navegador.'
+                  const assistantMessage = {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content: ackContent,
+                    created_at: new Date().toISOString(),
+                  }
+                  set((s) => ({
+                    messages: [...s.messages, assistantMessage],
+                    isStreaming: false,
+                    streamingContent: '',
+                    streamingToolTraces: [],
+                    pendingApproval: null,
+                    abortController: null,
+                  }))
+                  if (lastReport) exportReportAsPdf(lastReport.content)
+                  get().fetchConversations()
+                  return
+                }
+
                 const assistantMessage = {
                   id: (Date.now() + 1).toString(),
                   role: 'assistant',
@@ -284,6 +352,7 @@ const useStore = create((set, get) => ({
                   isStreaming: false,
                   streamingContent: '',
                   streamingToolTraces: [],
+                  pendingApproval: null,
                   abortController: null,
                 }))
                 get().fetchConversations()
@@ -343,7 +412,7 @@ const useStore = create((set, get) => ({
           }],
         }))
       }
-      set({ isStreaming: false, streamingContent: '', streamingToolTraces: [], abortController: null })
+      set({ isStreaming: false, streamingContent: '', streamingToolTraces: [], pendingApproval: null, abortController: null })
     }
   },
 
@@ -394,6 +463,27 @@ const useStore = create((set, get) => ({
   },
 
   toggleReasoning: () => set((s) => ({ reasoningEnabled: !s.reasoningEnabled })),
+
+  toggleRequireApproval: () => {
+    const next = !get().requireToolApproval
+    localStorage.setItem('ramibot_require_approval', next)
+    set({ requireToolApproval: next })
+  },
+
+  respondToApproval: async (approved) => {
+    const { pendingApproval } = get()
+    if (!pendingApproval) return
+    set({ pendingApproval: null })
+    try {
+      await fetch('/api/chat/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approval_id: pendingApproval.approvalId, approved }),
+      })
+    } catch (e) {
+      console.error('Failed to respond to approval:', e)
+    }
+  },
 
   saveSettings: async (settings) => {
     localStorage.setItem('ramibot_settings', JSON.stringify(settings))
@@ -500,9 +590,12 @@ const useStore = create((set, get) => ({
     }
   },
 
-  exportFindings: async (format = 'json') => {
+  exportFindings: async (format = 'json', { severity, conversationId } = {}) => {
     try {
-      const res = await fetch(`/api/findings/export?format=${format}`)
+      const params = new URLSearchParams({ format })
+      if (severity) params.set('severity', severity)
+      if (conversationId) params.set('conversation_id', conversationId)
+      const res = await fetch(`/api/findings/export?${params}`)
       if (!res.ok) return
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

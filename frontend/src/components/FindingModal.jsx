@@ -18,10 +18,46 @@ function extractTarget(args) {
   } catch { return '' }
 }
 
-function truncateResult(result) {
+function extractText(result) {
   if (!result) return ''
-  const str = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-  return str.length > 600 ? str.slice(0, 600) + '\n...' : str
+  // MCP tool results: { content: [{ type: "text", text: "..." }] }
+  if (result.content && Array.isArray(result.content)) {
+    const parts = result.content
+      .filter((c) => c.type === 'text' && c.text)
+      .map((c) => c.text)
+    if (parts.length) return parts.join('\n')
+  }
+  if (typeof result === 'string') return result
+  return JSON.stringify(result, null, 2)
+}
+
+function cleanMcpText(text) {
+  // If there's an EVIDENCE GATE, extract only its content — it's the clean summary.
+  // Everything else (raw JSON output, TACTICAL CONTEXT docs) is noise for a finding.
+  const gateMatch = text.match(/\[EVIDENCE GATE[^\]]*\]([\s\S]*?)\[END EVIDENCE GATE\]/i)
+  if (gateMatch) {
+    return gateMatch[1]
+      .replace(/^LANGUAGE RULE:.*$/gm, '')
+      .replace(/^IMPORTANT: Only the facts.*$/gm, '')
+      .trim()
+  }
+  // No evidence gate: strip TACTICAL CONTEXT block and return the raw tool output
+  return text
+    .replace(/\[TACTICAL CONTEXT[^\]]*\][\s\S]*?(\[END TACTICAL CONTEXT\]|$)/g, '')
+    .replace(/^LANGUAGE RULE:.*$/gm, '')
+    .trim()
+}
+
+function truncateResult(result) {
+  const raw = extractText(result)
+  const str = cleanMcpText(raw)
+  return str.length > 800 ? str.slice(0, 800) + '\n...' : str
+}
+
+function buildTitle(traceName, args) {
+  const tool = traceName.includes('__') ? traceName.split('__')[1] : traceName
+  const target = extractTarget(args)
+  return target ? `${tool} → ${target}` : tool
 }
 
 const fieldStyle = {
@@ -41,7 +77,7 @@ function FindingModal({ trace, onClose }) {
   const createFinding = useStore((s) => s.createFinding)
   const currentConversation = useStore((s) => s.currentConversation)
 
-  const [title, setTitle] = useState(`${trace.name} — finding`)
+  const [title, setTitle] = useState(buildTitle(trace.name, trace.arguments))
   const [severity, setSeverity] = useState('medium')
   const [description, setDescription] = useState(truncateResult(trace.result))
   const [target, setTarget] = useState(extractTarget(trace.arguments))
@@ -106,7 +142,7 @@ function FindingModal({ trace, onClose }) {
         </div>
 
         {/* Body */}
-        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', maxHeight: '70vh' }}>
           {/* Title */}
           <div>
             <label style={{
@@ -183,7 +219,7 @@ function FindingModal({ trace, onClose }) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={6}
-              style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.5 }}
+              style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.5, maxHeight: '14rem', overflowY: 'auto' }}
               onFocus={(e) => { e.target.style.borderColor = `rgb(var(--accent)/0.6)` }}
               onBlur={(e) => { e.target.style.borderColor = 'var(--bd)' }}
             />

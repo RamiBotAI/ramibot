@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.2-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.4-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,9 +26,9 @@
 </p>
 
 
-# RamiBot v3.3
+# RamiBot v3.4
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, and Tor transparent proxy management.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, and a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call until the operator approves or denies it.
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -87,13 +87,14 @@ The core differentiator is the **skill pipeline**: a prompt engineering system t
 
 **Data flow for a streaming chat request:**
 
-1. Frontend sends `POST /api/chat/stream` with conversation ID, provider, model, team mode, and MCP flag
+1. Frontend sends `POST /api/chat/stream` with conversation ID, provider, model, team mode, MCP flag, and optional `require_tool_approval`
 2. Backend loads conversation history from SQLite
 3. If MCP is enabled: skill pipeline classifies the input, selects a skill, builds a system prompt, and injects it as the first message in history
 4. Adapter streams the LLM response as Server-Sent Events (token events)
-5. If the LLM emits a tool call: the MCP client executes it, the result is appended to history, and a follow-up generation is triggered
-6. Backend saves the final message to SQLite with token usage and latency
-7. Frontend renders tokens incrementally and tool traces in real time
+5. If the LLM emits a tool call and **Approval Mode** is on: backend yields a `tool_approval_required` SSE event and waits (up to 120 s) for the operator's decision via `POST /api/chat/approve`; auto-denies on timeout
+6. If approved (or Approval Mode is off): the MCP client executes the tool, the result is appended to history, and a follow-up generation is triggered
+7. Backend saves the final message to SQLite with token usage and latency
+8. Frontend renders tokens incrementally and tool traces in real time
 
 ---
 
@@ -595,6 +596,72 @@ When MCP is enabled and the LLM emits a tool call:
 3. The result is displayed and injected back into the LLM context
 4. The LLM generates a follow-up response interpreting the result
 
+### Tool Approval Gate
+
+When **Approval Mode** is enabled (sidebar toggle, visible only when MCP is active), RamiBot pauses before executing every MCP tool call and waits for explicit operator confirmation.
+
+**Enabling it:**
+
+1. Enable MCP in the sidebar
+2. The **Approval Mode** toggle appears — activate it
+
+**What happens on a tool call:**
+
+1. A banner appears inline between the chat and the message input, showing:
+   - The tool short name (prefix stripped) and up to 4 key arguments (`target`, `host`, `port`, etc.)
+   - A **risk badge** colored by level: `low` (green), `medium` (amber), `high` (orange), `critical` (red) — sourced from `rami-kali/config.yaml → risk_levels`
+   - A **countdown timer** from 120 s; turns red at ≤ 15 s
+2. Click **APPROVE** → tool executes normally; stream continues
+3. Click **DENY** → backend injects `[TOOL EXECUTION DENIED BY USER]` into the LLM context; LLM reports the denial and suggests alternatives
+4. **Timeout** (120 s with no response) → auto-denied; banner shows "TIMED OUT — AUTO-DENIED"
+5. Pressing **Stop** mid-approval clears the banner immediately
+
+Risk levels are read from `rami-kali/config.yaml → risk_levels`. Tools not listed default to `medium`.
+
+### Findings Database
+
+Tool execution results can be saved as structured security findings for later review and export.
+
+**Saving a finding:**
+
+1. Expand any tool trace in the chat (click the tool name row)
+2. Click **SAVE AS FINDING** at the bottom of the trace
+3. The modal pre-fills the title (`tool → target`), description (cleaned evidence gate text — no raw JSON), and target from the tool arguments
+4. Select severity (Info / Low / Medium / High / Critical) and save
+
+**Reviewing findings:**
+
+Open **Settings > Findings** to see all saved findings. From there you can:
+
+- Filter by severity
+- Expand long descriptions inline (▼ SHOW MORE / ▲ SHOW LESS)
+- Export the filtered set as **JSON** or **CSV** (respects the active severity filter)
+- Export a single finding as JSON or CSV using the per-card buttons
+- Delete individual findings
+
+**Description extraction:**
+
+The finding description is auto-populated from the tool's evidence gate — the structured summary block that RamiBot's MCP server prepends to every tool result. This gives clean, human-readable evidence (verified facts, status, finding count) without raw JSON dumps or internal instruction text.
+
+### Reporting and PDF Export
+
+The reporting skill generates structured security reports (executive summary, per-finding analysis, attack path, recommendations, appendix).
+
+After generating a report, the LLM offers PDF export:
+
+> *¿Quieres exportar este reporte como PDF? Escribe **pdf** para descargarlo.*
+
+Type `pdf` (or `sí`, `dale`, `yes`, etc.) — the frontend intercepts the message without making an LLM call, opens a print-ready window, and triggers the browser print dialog automatically.
+
+The PDF includes:
+- **RamiBot logo** in the header with generation timestamp
+- Full report in clean typography (sans-serif, proper heading hierarchy)
+- Severity badges colored by level (`[CRITICAL]`, `[HIGH]`, etc.)
+- Formatted tables, code blocks, and lists
+- Print-optimized CSS with page-break handling
+
+No additional npm packages are required — PDF generation uses the browser's native print-to-PDF capability via `window.print()`.
+
 ### Docker Terminal
 
 1. Configure a container name in Settings > Docker
@@ -622,6 +689,7 @@ When MCP is enabled and the LLM emits a tool call:
 |--------|------|-------------|
 | POST | `/api/chat` | Non-streaming chat |
 | POST | `/api/chat/stream` | SSE streaming chat with MCP tool execution |
+| POST | `/api/chat/approve` | Resolve a pending tool approval (`approval_id`, `approved: bool`) |
 
 ### Providers
 
@@ -666,6 +734,27 @@ When MCP is enabled and the LLM emits a tool call:
 }
 ```
 
+### Findings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/findings` | Save a new finding |
+| GET | `/api/findings?severity=X&conversation_id=Y&limit=N` | List findings (all filters optional) |
+| DELETE | `/api/findings/{id}` | Delete a finding |
+| GET | `/api/findings/export?format=json\|csv&severity=X&conversation_id=Y` | Export findings as file download |
+
+`POST /api/findings` body:
+```json
+{
+  "conversation_id": "uuid-or-null",
+  "tool": "rami-kali__nmap",
+  "severity": "high",
+  "title": "nmap → 192.168.1.54",
+  "description": "status: success\nverified_facts:\n  - 22/tcp open ssh ...",
+  "target": "192.168.1.54"
+}
+```
+
 ### Settings
 
 | Method | Path | Description |
@@ -684,6 +773,9 @@ data: {"id": "call_xxx", "name": "server__tool", "arguments": "{...}"}
 
 event: tool_result
 data: {"tool": "server__tool", "arguments": {...}, "result": {...}}
+
+event: tool_approval_required
+data: {"approval_id": "uuid", "tool_name": "server__tool", "arguments": {...}, "risk_level": "high"}
 
 event: clear_content
 data: {}

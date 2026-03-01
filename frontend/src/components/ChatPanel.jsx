@@ -3,12 +3,14 @@ import useStore from '../store'
 import MessageBubble from './MessageBubble'
 import MessageInput from './MessageInput'
 import WelcomeScreen from './WelcomeScreen'
+import ToolApprovalBanner from './ToolApprovalBanner'
 import { Terminal } from 'lucide-react'
 
 function ChatPanel() {
   const {
     messages, isStreaming, streamingContent, streamingToolTraces,
     currentConversation, terminalCount, addTerminal, dockerContainer,
+    pendingApproval,
   } = useStore()
   const bottomRef = useRef(null)
 
@@ -87,6 +89,13 @@ function ChatPanel() {
               <div ref={bottomRef} />
             </div>
           </div>
+
+          {/* Tool approval banner */}
+          {pendingApproval && (
+            <div style={{ flexShrink: 0, position: 'relative', zIndex: 10 }}>
+              <ToolApprovalBanner />
+            </div>
+          )}
 
           {/* Input area */}
           <div style={{ flexShrink: 0, position: 'relative', zIndex: 10 }}>

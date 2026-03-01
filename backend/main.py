@@ -3,6 +3,7 @@ import time
 import asyncio
 import base64
 import sys
+import uuid
 import ipaddress
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -93,6 +94,26 @@ def _format_tool_content(trace: dict) -> str:
 
 mcp_client = MCPClient()
 
+# ── Tool Approval Gate ────────────────────────────────────────────────────────
+_pending_approvals: dict[str, dict] = {}
+
+
+def _get_risk_level(tool_name: str) -> str:
+    """Return the risk level for a tool from rami-kali/config.yaml."""
+    short_name = tool_name.split("__", 1)[-1] if "__" in tool_name else tool_name
+    try:
+        if CONFIG_PATH.exists():
+            cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+            risk_levels = cfg.get("risk_levels", {})
+            if isinstance(risk_levels, dict):
+                for level, tools in risk_levels.items():
+                    if tools and short_name in tools:
+                        return level
+    except Exception:
+        pass
+    return "medium"
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 def load_settings() -> dict:
     if SETTINGS_PATH.exists():
@@ -182,7 +203,7 @@ async def lifespan(app: FastAPI):
     await mcp_client.shutdown()
 
 
-app = FastAPI(title="RamiBot API", version="3.3", lifespan=lifespan)
+app = FastAPI(title="RamiBot API", version="3.4", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -213,6 +234,12 @@ class ChatRequest(BaseModel):
     reasoning_enabled: bool = False
     team_mode: str = "red"
     disabled_tools: list[str] = []
+    require_tool_approval: bool = False
+
+
+class ToolApprovalRequest(BaseModel):
+    approval_id: str
+    approved: bool
 
 
 class MCPServerCreate(BaseModel):
@@ -454,6 +481,7 @@ async def chat_stream(body: ChatRequest):
         token_usage = None
         tool_calls_collected = []
         tool_traces = []
+        my_approval_ids: list[str] = []
 
         try:
             async for event in adapter.stream(history, model, **kwargs):
@@ -475,16 +503,53 @@ async def chat_stream(body: ChatRequest):
                             server_name, tool_name = parts
                         else:
                             server_name, tool_name = "", name
-                        try:
-                            args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
-                            tool_result = await mcp_client.call_tool(server_name, tool_name, args)
-                            trace = {"tool": name, "arguments": args, "result": tool_result}
+                        args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+
+                        # ── Approval gate ──────────────────────────────────
+                        execute_tool = True
+                        if body.require_tool_approval:
+                            approval_id = str(uuid.uuid4())
+                            approval_event = asyncio.Event()
+                            _pending_approvals[approval_id] = {
+                                "event": approval_event,
+                                "approved": None,
+                                "expired": False,
+                            }
+                            my_approval_ids.append(approval_id)
+
+                            risk_level = _get_risk_level(name)
+                            yield {
+                                "event": "tool_approval_required",
+                                "data": json.dumps({
+                                    "approval_id": approval_id,
+                                    "tool_name": name,
+                                    "arguments": args,
+                                    "risk_level": risk_level,
+                                }),
+                            }
+
+                            try:
+                                await asyncio.wait_for(approval_event.wait(), timeout=120)
+                                execute_tool = _pending_approvals[approval_id].get("approved", False)
+                            except asyncio.TimeoutError:
+                                _pending_approvals[approval_id]["expired"] = True
+                                execute_tool = False
+                        # ──────────────────────────────────────────────────
+
+                        if not execute_tool:
+                            trace = {"tool": name, "arguments": args, "error": "[TOOL EXECUTION DENIED BY USER]"}
                             tool_traces.append(trace)
                             yield {"event": "tool_result", "data": json.dumps(trace)}
-                        except Exception as e:
-                            trace = {"tool": name, "error": str(e)}
-                            tool_traces.append(trace)
-                            yield {"event": "tool_result", "data": json.dumps(trace)}
+                        else:
+                            try:
+                                tool_result = await mcp_client.call_tool(server_name, tool_name, args)
+                                trace = {"tool": name, "arguments": args, "result": tool_result}
+                                tool_traces.append(trace)
+                                yield {"event": "tool_result", "data": json.dumps(trace)}
+                            except Exception as e:
+                                trace = {"tool": name, "error": str(e)}
+                                tool_traces.append(trace)
+                                yield {"event": "tool_result", "data": json.dumps(trace)}
 
                 elif etype == "usage":
                     token_usage = event["data"]
@@ -558,8 +623,21 @@ async def chat_stream(body: ChatRequest):
 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"error": str(e)})}
+        finally:
+            for aid in my_approval_ids:
+                _pending_approvals.pop(aid, None)
 
     return EventSourceResponse(event_generator())
+
+
+@app.post("/api/chat/approve")
+async def chat_approve(body: ToolApprovalRequest):
+    entry = _pending_approvals.get(body.approval_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Approval not found or expired")
+    entry["approved"] = body.approved
+    entry["event"].set()
+    return {"status": "ok"}
 
 
 # --- Skills Log ---
