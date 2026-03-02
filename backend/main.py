@@ -81,7 +81,8 @@ def _format_tool_content(trace: dict) -> str:
     """Return the content string to inject into the follow-up history.
 
     If the tool errored, return an explicit error notice so the LLM does NOT
-    fabricate output. If it succeeded, return the formatted result.
+    fabricate output. If it succeeded, wrap raw output in an Evidence Block so
+    the LLM knows this is the sole authoritative, immutable factual source.
     """
     if "error" in trace:
         return (
@@ -90,7 +91,12 @@ def _format_tool_content(trace: dict) -> str:
             "Do NOT invent or fabricate output. "
             "Inform the user of the error and suggest how to fix it."
         )
-    return _format_tool_result(trace.get("result", ""))
+    raw = _format_tool_result(trace.get("result", ""))
+    return (
+        "[EVIDENCE BLOCK — DO NOT MODIFY]\n"
+        f"{raw}\n"
+        "[END OF EVIDENCE]"
+    )
 
 mcp_client = MCPClient()
 

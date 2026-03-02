@@ -3,6 +3,19 @@ import { exportReportAsPdf } from './reportPdf'
 
 const PDF_CONFIRM_RE = /^(pdf|sí|si|yes|dale|ok|quiero|quiero pdf|sí quiero|si quiero|exportar pdf|descargar pdf|export pdf|download pdf|generate pdf|generar pdf|sí,?\s*por favor|si,?\s*por favor)$/i
 
+/**
+ * Strips internal reasoning blocks emitted by reasoning-capable models.
+ * Must never appear in stored messages, exports, or PDFs.
+ * Covers: <think>...</think> (LM Studio / DeepSeek / QwQ)
+ *         <thinking>...</thinking> (variant spelling)
+ */
+function stripReasoning(content) {
+  if (!content) return content
+  return content
+    .replace(/<think>[\s\S]*?<\/think>\s*/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, '')
+}
+
 const useStore = create((set, get) => ({
   conversations: [],
   currentConversation: null,
@@ -341,7 +354,7 @@ const useStore = create((set, get) => ({
                 const assistantMessage = {
                   id: (Date.now() + 1).toString(),
                   role: 'assistant',
-                  content: fullContent || '',
+                  content: stripReasoning(fullContent) || '',
                   tool_traces: toolTraces.length > 0 ? toolTraces : undefined,
                   usage: usage || data.token_usage,
                   latency: data.latency_ms,
@@ -374,7 +387,7 @@ const useStore = create((set, get) => ({
         const assistantMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: fullContent,
+          content: stripReasoning(fullContent),
           tool_traces: toolTraces.length > 0 ? toolTraces : undefined,
           usage,
           created_at: new Date().toISOString(),
@@ -396,7 +409,7 @@ const useStore = create((set, get) => ({
             messages: [...s.messages, {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: currentContent + '\n\n*[Generation stopped]*',
+              content: stripReasoning(currentContent) + '\n\n*[Generation stopped]*',
               created_at: new Date().toISOString(),
             }],
           }))

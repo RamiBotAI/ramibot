@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.4-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.5-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,9 +26,9 @@
 </p>
 
 
-# RamiBot v3.4
+# RamiBot v3.5
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, and a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call until the operator approves or denies it.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, and a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output.
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -129,7 +129,7 @@ The skill system is invoked on every MCP-enabled chat request. It classifies inp
 4. **Fallback**: No match defaults to the team default (recon for red, analysis for blue)
 5. **Context extraction**: IPv4, URL, and `host:port` patterns are extracted from input and recent history and injected as `CONTEXT TARGET` in the prompt
 6. **Execution intent**: Imperative verbs ("run", "execute", "scan", "exploit") are detected and signaled to the composer
-7. **Prompt assembly**: Team preamble + skill methodology section + common footer (MCP guidance, language matching, no fabrication rule)
+7. **Prompt assembly**: Team preamble + skill methodology section + `EVIDENCE_RULES` + `COMMON_FOOTER`
 8. **Audit log**: Every decision is appended as JSON to `skill_decisions.log`
 
 ### Team Modes
@@ -145,6 +145,56 @@ The skill system is invoked on every MCP-enabled chat request. It classifies inp
 - Priority order: defense > analysis > reporting > recon
 
 Team mode is selected per conversation from the sidebar toggle and persisted in localStorage.
+
+---
+
+## Evidence-Locked Reporting
+
+RamiBot enforces a strict evidence discipline across all team modes and all skills to prevent LLM hallucinations in security reports and operational output.
+
+### How it works
+
+**Tool result wrapping (`backend/main.py`):**
+
+Every successful MCP tool result is wrapped in immutable evidence tags before being injected into the LLM's follow-up context:
+
+```
+[EVIDENCE BLOCK — DO NOT MODIFY]
+<raw tool output>
+[END OF EVIDENCE]
+```
+
+**Global enforcement (`backend/skills/composer.py`):**
+
+`EVIDENCE_RULES` is injected into every system prompt regardless of team mode or skill. Eight mandatory rules apply to all responses:
+
+| Rule | Enforcement |
+|------|-------------|
+| Only Evidence Block content is fact | No information from model training cited as operational finding |
+| No fabricated versions / CVEs / CVSS | `"Version not detected."` / `"Requires manual validation."` / score omitted |
+| No external gap-filling | If nmap shows a service with no version, no version is assumed |
+| No inferred properties | Encryption status, authentication state, EOL status, exploitability, internet exposure, and credential weakness may only be stated if the Evidence Block explicitly contains them |
+| Conditional risk language | Forbidden: `"is vulnerable"`, `"is exploitable"`, `"is exposed"`. Required: `"may be"`, `"appears to"`, `"consistent with"` — unless the tool itself uses assertive language |
+| Severity from confirmed findings only | No Critical/High/Medium/Low from port number, service name, or version string alone. Default: `"Informational"` if no vulnerability is explicitly reported |
+| Three-layer output discipline | `[RAW OUTPUT]` / `[PARSED DATA]` / `[INTERPRETATION]` clearly separated |
+| No Evidence Block → no fabrication | State `"No tool output available"` and stop |
+
+**Skill-level reinforcement:**
+
+Each skill definition carries its own `EVIDENCE DISCIPLINE:` note scoped to its operational context:
+
+- `recon`: report only scan output; no added versions or CVEs
+- `exploit`: CVE candidates are hypotheses (`"may be vulnerable — requires validation"`), not confirmed matches
+- `analysis`: TTP attribution uses conditional language only (`"consistent with"`, `"suggests"`)
+- `defense`: remediation only for confirmed findings; no hypothetical patching
+- `reporting`: verbatim Evidence Block excerpts in the Evidence field; severity and CVSS only from tool output
+
+### Reasoning block stripping
+
+When reasoning-capable models (LM Studio / DeepSeek / QwQ) emit `<think>...</think>` content, it is stripped at two independent points:
+
+1. **Storage layer** (`store.js` — `stripReasoning()`): applied to `fullContent` before it is committed to the messages array. Stored messages and SQLite records never contain reasoning blocks.
+2. **Export layer** (`reportPdf.js`): three-pass cleaning before HTML rendering — strip reasoning tags, discard content before `<!-- REPORT -->` marker, strip internal markers. Defense-in-depth for messages stored before the stripping was deployed.
 
 ---
 
@@ -645,13 +695,18 @@ The finding description is auto-populated from the tool's evidence gate — the 
 
 ### Reporting and PDF Export
 
-The reporting skill generates structured security reports (executive summary, per-finding analysis, attack path, recommendations, appendix).
+The reporting skill generates structured security reports (executive summary, per-finding analysis, attack path, recommendations, appendix). All claims in the report are constrained by the Evidence-Locked Reporting rules — severity, CVEs, and CVSS scores only appear when explicitly present in tool output.
 
 After generating a report, the LLM offers PDF export:
 
 > *¿Quieres exportar este reporte como PDF? Escribe **pdf** para descargarlo.*
 
 Type `pdf` (or `sí`, `dale`, `yes`, etc.) — the frontend intercepts the message without making an LLM call, opens a print-ready window, and triggers the browser print dialog automatically.
+
+The PDF export runs three cleaning passes before rendering:
+1. Strip `<think>...</think>` / `<thinking>...</thinking>` blocks (internal model reasoning — never included in deliverables)
+2. If `<!-- REPORT -->` marker is present, discard all content before it (removes any preamble or stray reasoning)
+3. Strip the internal `<!-- REPORT -->` marker and PDF offer line
 
 The PDF includes:
 - **RamiBot logo** in the header with generation timestamp

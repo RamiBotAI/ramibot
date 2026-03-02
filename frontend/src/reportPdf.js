@@ -187,8 +187,24 @@ const PRINT_CSS = `
  * @param {string} markdown — raw markdown content (may include <!-- REPORT --> marker)
  */
 export function exportReportAsPdf(markdown) {
-  // Strip internal markers and PDF offer line
-  const clean = markdown
+  // ── Layer 1: Strip reasoning blocks ─────────────────────────────────────────
+  // Internal model thinking must never appear in exported PDFs.
+  // Covers: <think>...</think> (LM Studio / DeepSeek / QwQ)
+  //         <thinking>...</thinking> (variant spelling used by some providers)
+  let reportContent = markdown
+    .replace(/<think>[\s\S]*?<\/think>\s*/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, '')
+
+  // ── Layer 2: Extract only the structured report body ─────────────────────────
+  // If a <!-- REPORT --> marker is present, discard everything before it.
+  // Reasoning and preamble text always appear before this marker.
+  const markerIdx = reportContent.indexOf('<!-- REPORT -->')
+  if (markerIdx > 0) {
+    reportContent = reportContent.slice(markerIdx)
+  }
+
+  // ── Layer 3: Strip internal markers and PDF offer line ───────────────────────
+  const clean = reportContent
     .replace(/<!--\s*REPORT\s*-->\s*/g, '')
     .replace(/^>\s*📄.*$/gm, '')
     .replace(/^\s*---\s*$/gm, (m, offset, str) => {
