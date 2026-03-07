@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.5-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.6-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,9 +26,9 @@
 </p>
 
 
-# RamiBot v3.5
+# RamiBot v3.6
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, and a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, and **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models.
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -120,6 +120,7 @@ The skill system is invoked on every MCP-enabled chat request. It classifies inp
 | `defense` | blue only | 20 | low | harden, firewall, patch, mitigate, incident, siem, ids |
 | `analysis` | red, blue | 30 | low | analyze, log, traffic, pcap, forensic, anomaly, wireshark |
 | `reporting` | red, blue | 50 | low | report, document, executive, findings, export |
+| `burp_expert` | red, blue | 15 | high | burp, web app, proxy history, repeater, intruder, fuzz, owasp |
 
 ### Pipeline Logic
 

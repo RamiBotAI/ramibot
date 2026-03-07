@@ -67,9 +67,37 @@ function Field({ label, type, placeholder, icon: Icon, value, onChange }) {
 }
 
 /* ── Tab content panels ──────────────────────────────── */
-function PanelInterface({ matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed }) {
+function PanelInterface({ matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed, responseLanguage, setResponseLanguage }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+      {/* Response Language */}
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--bd)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Globe size={13} style={{ color: 'var(--t2)' }} />
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.65rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t1)' }}>Response Language</span>
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--t3)' }}>
+          # forces the LLM to reply in the selected language regardless of context
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+          {[['auto','AUTO — detect from input'],['es','ES'],['en','EN'],['fr','FR'],['de','DE'],['pt','PT'],['it','IT']].map(([code, label]) => (
+            <button key={code} onClick={() => setResponseLanguage(code)} style={{
+              padding: '0.28rem 0.6rem',
+              background: responseLanguage === code ? `rgb(var(--accent) / 0.1)` : 'transparent',
+              border: responseLanguage === code ? `1px solid rgb(var(--accent) / 0.5)` : '1px solid var(--bd)',
+              borderRadius: 0, cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontSize: '0.58rem',
+              letterSpacing: '0.1em',
+              color: responseLanguage === code ? `rgb(var(--accent))` : 'var(--t2)',
+              transition: 'all 0.15s',
+            }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ background: 'var(--surface-2)', border: '1px solid var(--bd)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -228,6 +256,7 @@ function PanelTor() {
 function PanelMcp() {
   const [mcpServers, setMcpServers] = useState([])
   const [mcpLoading, setMcpLoading] = useState(false)
+  const [mcpReloading, setMcpReloading] = useState(false)
   const [mcpForm, setMcpForm] = useState({ name: '', type: 'stdio', command: '', args: '', url: '' })
   const [mcpError, setMcpError] = useState('')
 
@@ -261,6 +290,15 @@ function PanelMcp() {
     finally { setMcpLoading(false) }
   }
 
+  const reloadMcpServers = async () => {
+    setMcpReloading(true)
+    try {
+      await fetch('/api/mcp/reload', { method: 'POST' })
+      await fetchMcpServers()
+    } catch {}
+    finally { setMcpReloading(false) }
+  }
+
   const deleteMcpServer = async (name) => {
     try {
       await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' })
@@ -282,6 +320,26 @@ function PanelMcp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.55rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--t3)' }}>
+          {mcpServers.length} server{mcpServers.length !== 1 ? 's' : ''}
+        </span>
+        <button onClick={reloadMcpServers} disabled={mcpReloading} title="Reconnect all MCP servers" style={{
+          display: 'flex', alignItems: 'center', gap: '0.35rem',
+          padding: '0.28rem 0.6rem',
+          background: 'transparent', border: '1px solid var(--bd)',
+          borderRadius: 0, color: mcpReloading ? 'var(--t3)' : 'var(--t2)',
+          fontFamily: 'var(--font-display)', fontSize: '0.55rem',
+          letterSpacing: '0.12em', textTransform: 'uppercase',
+          cursor: mcpReloading ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+        }}
+          onMouseEnter={e => { if (!mcpReloading) { e.currentTarget.style.borderColor = `rgb(var(--accent) / 0.5)`; e.currentTarget.style.color = `rgb(var(--accent))` } }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.color = mcpReloading ? 'var(--t3)' : 'var(--t2)' }}
+        >
+          <RefreshCw size={10} style={{ animation: mcpReloading ? 'spin 0.8s linear infinite' : 'none' }} />
+          {mcpReloading ? 'RELOADING...' : 'RELOAD'}
+        </button>
+      </div>
       {mcpServers.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
           {mcpServers.map((server) => (
@@ -858,7 +916,7 @@ function PanelFindings() {
 
 /* ── Main modal ──────────────────────────────────────── */
 function SettingsModal({ onClose }) {
-  const { settings, saveSettings, setDockerContainer, matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed } = useStore()
+  const { settings, saveSettings, setDockerContainer, matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed, responseLanguage, setResponseLanguage } = useStore()
   const [activeTab, setActiveTab] = useState('interface')
   const [form, setForm] = useState({
     openai_api_key: '', anthropic_api_key: '',
@@ -951,7 +1009,7 @@ function SettingsModal({ onClose }) {
           {/* Right content */}
           <div style={{ flex:1, overflowY:'auto', padding:'1.1rem 1.25rem' }}>
             {activeTab === 'interface' && (
-              <PanelInterface matrixEnabled={matrixEnabled} toggleMatrix={toggleMatrix} matrixSpeed={matrixSpeed} setMatrixSpeed={setMatrixSpeed} />
+              <PanelInterface matrixEnabled={matrixEnabled} toggleMatrix={toggleMatrix} matrixSpeed={matrixSpeed} setMatrixSpeed={setMatrixSpeed} responseLanguage={responseLanguage} setResponseLanguage={setResponseLanguage} />
             )}
             {activeTab === 'apikeys' && <PanelApiKeys form={form} handleChange={handleChange} />}
             {activeTab === 'docker'  && <PanelDocker  form={form} handleChange={handleChange} />}

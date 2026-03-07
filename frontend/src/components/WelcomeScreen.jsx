@@ -48,7 +48,7 @@ function WelcomeScreen() {
           color: `rgb(var(--accent) / 0.65)`,
           marginTop: '0.6rem',
         }}>
-          INTELLIGENCE INTERFACE // v3.5
+          INTELLIGENCE INTERFACE // v3.6
         </div>
       </div>
 

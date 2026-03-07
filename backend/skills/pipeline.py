@@ -20,8 +20,8 @@ TEAM_DEFAULTS = {
 
 # Priority walk order: first match wins
 TEAM_PRIORITY = {
-    "red":  ["exploit", "recon", "analysis", "reporting"],
-    "blue": ["defense", "analysis", "reporting", "recon"],
+    "red":  ["exploit", "burp_expert", "recon", "analysis", "reporting"],
+    "blue": ["defense", "burp_expert", "analysis", "reporting", "recon"],
 }
 
 # Explicit phase-switch keywords (multi-word first, then single-word)
@@ -42,6 +42,11 @@ _PHASE_SWITCH_KEYWORDS: dict[str, list[str]] = {
         "escanear", "reconocimiento",
         "scan", "recon", "enumerate", "nmap",
     ],
+    "burp_expert": [
+        "burp", "burpsuite", "burp suite", "repeater", "intruder",
+        "web app", "web application", "web assessment",
+        "proxy history", "historial burp", "http request",
+    ],
 }
 
 # Markers in previous assistant messages that reveal the current phase
@@ -49,7 +54,8 @@ _PHASE_MARKERS: dict[str, list[str]] = {
     "recon":     ["[RECON]", "Nmap scan report", "nmap", "enumerat", "escaneo"],
     "exploit":   ["[VECTOR]", "[EXPLOIT]", "payload", "shell", "meterpreter", "privesc"],
     "defense":   ["[DEFENSE]", "[FIX]", "remediation", "patch", "mitigate"],
-    "reporting": ["[REPORT]", "## Executive Summary", "## Findings", "CVSS"],
+    "reporting":    ["[REPORT]", "## Executive Summary", "## Findings", "CVSS"],
+    "burp_expert":  ["[WEB_SCAN]", "[PROXY]", "[REQUEST]", "[FINDING]", "proxy history", "Repeater", "Intruder"],
 }
 
 # Regexes used to detect targets (IPv4, URLs, host:port)

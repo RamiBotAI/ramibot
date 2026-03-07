@@ -37,6 +37,7 @@ const useStore = create((set, get) => ({
   mcpTools: [],
   disabledMcpTools: JSON.parse(localStorage.getItem('ramibot_disabled_tools') || '[]'),
   teamMode: localStorage.getItem('ramibot_team') || 'red',
+  responseLanguage: localStorage.getItem('ramibot_lang') || 'auto',
   terminalCount: 0,
   dockerContainer: localStorage.getItem('ramibot_docker_container') || '',
   torActive: false,
@@ -65,6 +66,11 @@ const useStore = create((set, get) => ({
   setTeamMode: (mode) => {
     set({ teamMode: mode })
     localStorage.setItem('ramibot_team', mode)
+  },
+
+  setResponseLanguage: (lang) => {
+    localStorage.setItem('ramibot_lang', lang)
+    set({ responseLanguage: lang })
   },
 
   fetchConversations: async () => {
@@ -236,6 +242,7 @@ const useStore = create((set, get) => ({
         team_mode: get().teamMode,
         disabled_tools: get().disabledMcpTools,
         require_tool_approval: get().requireToolApproval,
+        response_language: get().responseLanguage,
       }
 
       const headers = { 'Content-Type': 'application/json' }
@@ -482,6 +489,7 @@ const useStore = create((set, get) => ({
     localStorage.setItem('ramibot_require_approval', next)
     set({ requireToolApproval: next })
   },
+
 
   respondToApproval: async (approved) => {
     const { pendingApproval } = get()

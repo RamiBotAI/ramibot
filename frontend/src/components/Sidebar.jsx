@@ -89,6 +89,7 @@ function Sidebar({ onOpenSettings }) {
   } = useStore()
 
   const [mcpToolsExpanded, setMcpToolsExpanded] = useState(false)
+  const [expandedServers, setExpandedServers] = useState(new Set())
   const [customModelMode, setCustomModelMode] = useState(false)
 
   useEffect(() => {
@@ -110,6 +111,41 @@ function Sidebar({ onOpenSettings }) {
   }
 
   const enabledCount = mcpTools.length - disabledMcpTools.filter(t => mcpTools.some(mt => mt.function?.name === t)).length
+
+  // Group tools by server (prefix before __)
+  const serverGroups = mcpTools.reduce((acc, tool) => {
+    const name = tool.function?.name ?? ''
+    const sep = name.indexOf('__')
+    const server = sep !== -1 ? name.slice(0, sep) : 'default'
+    if (!acc[server]) acc[server] = []
+    acc[server].push(tool)
+    return acc
+  }, {})
+
+  const toggleServerExpanded = (server) => {
+    setExpandedServers(prev => {
+      const next = new Set(prev)
+      if (next.has(server)) next.delete(server)
+      else next.add(server)
+      return next
+    })
+  }
+
+  const toggleServer = (server) => {
+    const tools = serverGroups[server] ?? []
+    const allDisabled = tools.every(t => disabledMcpTools.includes(t.function?.name))
+    tools.forEach(t => {
+      const name = t.function?.name
+      const disabled = disabledMcpTools.includes(name)
+      if (allDisabled && disabled) toggleMcpTool(name)   // enable all
+      if (!allDisabled && !disabled) toggleMcpTool(name) // disable all
+    })
+  }
+
+  const serverEnabledCount = (server) => {
+    const tools = serverGroups[server] ?? []
+    return tools.filter(t => !disabledMcpTools.includes(t.function?.name)).length
+  }
 
   return (
     <>
@@ -421,37 +457,96 @@ function Sidebar({ onOpenSettings }) {
                 </button>
                 {mcpToolsExpanded && (
                   <div style={{
-                    marginTop: '0.35rem', marginLeft: '0.5rem',
-                    maxHeight: '7.5rem', overflowY: 'auto',
-                    display: 'flex', flexDirection: 'column', gap: '0.25rem',
+                    marginTop: '0.35rem', marginLeft: '0.25rem',
+                    maxHeight: '12rem', overflowY: 'auto',
+                    display: 'flex', flexDirection: 'column', gap: '0.2rem',
                   }}>
-                    {mcpTools.map((tool, i) => {
-                      const name = tool.function?.name
-                      const disabled = disabledMcpTools.includes(name)
+                    {Object.entries(serverGroups).map(([server, tools]) => {
+                      const isExpanded = expandedServers.has(server)
+                      const enCount = serverEnabledCount(server)
+                      const allOff = enCount === 0
                       return (
-                        <label
-                          key={i}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '0.45rem',
-                            fontSize: '0.65rem', cursor: 'pointer',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                          title={tool.function?.description}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!disabled}
-                            onChange={() => toggleMcpTool(name)}
-                            style={{ width: '10px', height: '10px', accentColor: `rgb(var(--accent))`, cursor: 'pointer', borderRadius: 0 }}
-                          />
-                          <span style={{
-                            color: disabled ? 'var(--t3)' : 'var(--t2)',
-                            textDecoration: disabled ? 'line-through' : 'none',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {name}
-                          </span>
-                        </label>
+                        <div key={server}>
+                          {/* Server row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <button
+                              onClick={() => toggleServerExpanded(server)}
+                              style={{
+                                background: 'none', border: 'none', padding: '0.1rem',
+                                color: 'var(--t2)', cursor: 'pointer', lineHeight: 0, flexShrink: 0,
+                              }}
+                            >
+                              {isExpanded ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+                            </button>
+                            <input
+                              type="checkbox"
+                              checked={!allOff}
+                              onChange={() => toggleServer(server)}
+                              style={{ width: '10px', height: '10px', accentColor: `rgb(var(--accent))`, cursor: 'pointer', flexShrink: 0 }}
+                            />
+                            <span
+                              onClick={() => toggleServerExpanded(server)}
+                              style={{
+                                fontFamily: 'var(--font-display)', fontSize: '0.6rem',
+                                letterSpacing: '0.1em', textTransform: 'uppercase',
+                                color: allOff ? 'var(--t3)' : 'var(--t1)',
+                                cursor: 'pointer', flex: 1,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {server}
+                            </span>
+                            <span style={{
+                              fontSize: '0.5rem', padding: '0.08rem 0.28rem',
+                              background: `rgb(var(--accent) / 0.12)`,
+                              color: `rgb(var(--accent))`,
+                              fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+                              flexShrink: 0,
+                            }}>
+                              {enCount}/{tools.length}
+                            </span>
+                          </div>
+
+                          {/* Tool rows (second level) */}
+                          {isExpanded && (
+                            <div style={{
+                              marginLeft: '1.25rem', marginTop: '0.15rem',
+                              display: 'flex', flexDirection: 'column', gap: '0.18rem',
+                            }}>
+                              {tools.map((tool, i) => {
+                                const name = tool.function?.name
+                                const sep = name?.indexOf('__')
+                                const shortName = sep !== -1 ? name.slice(sep + 2) : name
+                                const disabled = disabledMcpTools.includes(name)
+                                return (
+                                  <label
+                                    key={i}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                      fontSize: '0.63rem', cursor: 'pointer',
+                                      fontFamily: 'var(--font-mono)',
+                                    }}
+                                    title={tool.function?.description}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!disabled}
+                                      onChange={() => toggleMcpTool(name)}
+                                      style={{ width: '10px', height: '10px', accentColor: `rgb(var(--accent))`, cursor: 'pointer', flexShrink: 0 }}
+                                    />
+                                    <span style={{
+                                      color: disabled ? 'var(--t3)' : 'var(--t2)',
+                                      textDecoration: disabled ? 'line-through' : 'none',
+                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    }}>
+                                      {shortName}
+                                    </span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -469,6 +564,7 @@ function Sidebar({ onOpenSettings }) {
               <Toggle on={requireToolApproval} onClick={toggleRequireApproval} />
             </div>
           )}
+
 
           {/* Reasoning */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

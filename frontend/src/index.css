@@ -225,6 +225,12 @@ select option {
 .streaming-dot:nth-child(2) { animation: pulse-dot 1.4s infinite 0.22s; }
 .streaming-dot:nth-child(3) { animation: pulse-dot 1.4s infinite 0.44s; }
 
+/* ── SPIN ───────────────────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* ── TERMINAL BORDER PULSE ──────────────────────────────────── */
 @keyframes terminal-border-pulse {
   0%, 100% { box-shadow: 0 0 6px 0 rgb(var(--accent) / 0.25); }

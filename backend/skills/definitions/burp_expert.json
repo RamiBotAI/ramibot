@@ -1,0 +1,36 @@
+{
+  "id": "burp_expert",
+  "name": "Web Assessment (Burp Suite)",
+  "description": "HTTP/web application testing via Burp Suite MCP tools — proxy history, request crafting, Repeater, Intruder, and encoding utilities",
+  "teams": ["red", "blue"],
+  "triggers": [
+    "burp", "burpsuite", "burp suite", "repeater", "intruder",
+    "web app", "web application", "web assessment",
+    "intercept", "proxy history", "historial proxy", "historial burp",
+    "http request", "peticion http", "petición http",
+    "http2", "websocket", "websockets",
+    "fuzz", "fuzzing",
+    "owasp",
+    "aplicacion web", "aplicación web",
+    "escaneo web",
+    "burp proxy", "burp scan", "burp history", "burp sitemap"
+  ],
+  "priority": 15,
+  "prompt_section": "You are conducting a web application assessment using the Burp Suite MCP toolkit.\n\nIMPORTANT — PROXY SETUP: The Burp Suite proxy is already running and active via its own MCP server. Do NOT call burp_proxy or any rami-kali proxy-start tools — those control a separate container-based instance that is not in use here.\n\nFollow this staged workflow:\n\n0. TRAFFIC GENERATION — Send initial HTTP requests to the target using send_http1_request or send_http2_request to seed the proxy history. Send a GET to the root path first, then follow any redirects or interesting links found in the response. If a login form is present, craft and send the form POST. This generates history entries for the next phase.\n\n1. PROXY HISTORY REVIEW — Call get_proxy_http_history (or get_proxy_http_history_regex for filtered searches) to review captured HTTP traffic. Use get_proxy_websocket_history / get_proxy_websocket_history_regex for WebSocket flows. Call output_project_options to verify scope and session config before active testing.\n\n2. INTERCEPT CONTROL — Use set_proxy_intercept_state (on/off) and set_task_execution_engine_state to manage the proxy and scanner state as needed per test phase. Turn intercept on before actions that require live request modification; turn it off during automated crawling.\n\n3. REQUEST CRAFTING — Use send_http1_request or send_http2_request to send targeted probes directly. Call create_repeater_tab to persist interesting or modified requests for iterative manual testing. Use get_active_editor_contents / set_active_editor_contents to inspect and modify the currently-focused editor request.\n\n4. PAYLOAD ENCODING — Always encode payloads with the correct tool before injecting: url_encode/url_decode for URL contexts, base64_encode/base64_decode for header or body contexts, generate_random_string for boundary values, nonces, or CSRF tokens.\n\n5. FUZZING — Use send_to_intruder with a crafted payload set to enumerate parameters, path segments, auth tokens, or IDOR references. Pair with sqlmap for SQL injection confirmation on injectable parameters. Use wfuzz or nikto for directory/endpoint discovery when proxy history is sparse.\n\n6. EVIDENCE DISCIPLINE — Only report findings explicitly confirmed in tool response content. Never infer vulnerability existence from status codes, headers, or version strings alone. Use conditional language: \"may indicate\", \"consistent with\", \"warrants further testing\". Never assert encryption state, authentication requirements, or exploitability unless the tool output states it verbatim. Severity defaults to Informational unless a vulnerability is explicitly confirmed by tool output.\n\nTOOL EXECUTION RULES: You MUST call tools using the tool interface — never output <tool_call>, <function=...>, or any XML-style tool syntax in your text response; that format is inert in this system and the tool will not execute. After each tool result, invoke the next required tool immediately without producing explanatory text. Minimum per phase: TRAFFIC GENERATION requires send_http1_request or send_http2_request; PROXY HISTORY REVIEW requires get_proxy_http_history; REQUEST CRAFTING requires send_http1_request or send_http2_request. Never skip a phase because prior output seems sufficient. [WEB_SCAN]",
+  "tool_hints": [
+    "send_http1_request", "send_http2_request",
+    "create_repeater_tab", "send_to_intruder",
+    "set_proxy_intercept_state", "set_task_execution_engine_state",
+    "get_proxy_http_history", "get_proxy_http_history_regex",
+    "get_proxy_websocket_history", "get_proxy_websocket_history_regex",
+    "output_project_options", "output_user_options",
+    "set_project_options", "set_user_options",
+    "get_active_editor_contents", "set_active_editor_contents",
+    "url_encode", "url_decode",
+    "base64_encode", "base64_decode",
+    "generate_random_string",
+    "sqlmap", "wfuzz", "nikto"
+  ],
+  "risk_level": "high",
+  "response_format": "Structure as: [TRAFFIC] — Initial requests sent: method, URL, status, notable response details. [PROXY] — Intercept state and relevant history entries (method | URL | status | size). [REQUEST] — Crafted request + raw response excerpt (Evidence Block). [FINDING] — Observations from response content using conditional language only. [NEXT] — Recommended follow-up: Repeater iteration / Intruder payload set / sqlmap on injectable param / report."
+}

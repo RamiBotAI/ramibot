@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import asyncio
 import base64
@@ -97,6 +98,77 @@ def _format_tool_content(trace: dict) -> str:
         f"{raw}\n"
         "[END OF EVIDENCE]"
     )
+
+
+# ── Hermes-format <tool_call> parser ─────────────────────────────────────────
+_HERMES_BLOCK_RE = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL | re.IGNORECASE)
+_HERMES_FUNC_RE = re.compile(r"<function=([^>]+)>", re.IGNORECASE)
+_HERMES_PARAM_RE = re.compile(r"<parameter>(.*?)</parameter>", re.DOTALL | re.IGNORECASE)
+
+
+def _parse_hermes_tool_calls(text: str, available_tools: list) -> list:
+    """Parse Hermes-format <tool_call> blocks emitted as plain text by some models.
+
+    Supports two variants:
+      XML:  <tool_call><function=Name><parameter>key>value</parameter></function></tool_call>
+      JSON: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
+
+    Maps parsed function names to registered MCP tool names via normalized comparison
+    (strips underscores, case-insensitive). Returns tool_call dicts compatible with
+    tool_calls_collected format so the existing follow-up generation path handles them.
+    """
+    if "<tool_call>" not in text.lower():
+        return []
+
+    # Build normalized lookups — models often omit the server prefix (e.g. write
+    # "get_proxy_http_history" instead of "rami-kali__get_proxy_http_history"),
+    # so we index both the full name and the tool-part-only (after "__").
+    # All non-alphanumeric chars (underscores, hyphens, "__") are stripped.
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", s.lower())
+
+    tool_lookup: dict[str, str] = {}
+    for tool in available_tools:
+        name = tool["function"]["name"]
+        tool_lookup[_norm(name)] = name          # full: "ramikaligethttphistory"
+        if "__" in name:
+            tool_part = name.split("__", 1)[1]
+            tool_lookup[_norm(tool_part)] = name  # partial: "getproxyhttphistory"
+
+    results = []
+    for i, block_match in enumerate(_HERMES_BLOCK_RE.finditer(text)):
+        content = block_match.group(1).strip()
+
+        # Try JSON variant first
+        try:
+            data = json.loads(content)
+            func_name = data.get("name", "")
+            args = data.get("arguments", data.get("parameters", {}))
+        except (json.JSONDecodeError, AttributeError):
+            # XML variant: <function=Name><parameter>key>value</parameter></function>
+            func_match = _HERMES_FUNC_RE.search(content)
+            if not func_match:
+                continue
+            func_name = func_match.group(1).strip()
+            args = {}
+            for param_match in _HERMES_PARAM_RE.finditer(content):
+                param_content = param_match.group(1).strip()
+                if ">" in param_content:
+                    key, _, value = param_content.partition(">")
+                    args[key.strip()] = value.strip()
+
+        if not func_name:
+            continue
+
+        # Resolve via full name first, then tool-part-only
+        actual_name = tool_lookup.get(_norm(func_name))
+        if not actual_name:
+            continue
+
+        results.append({"id": f"hermes_{i}", "name": actual_name, "arguments": args})
+
+    return results
+# ─────────────────────────────────────────────────────────────────────────────
 
 mcp_client = MCPClient()
 
@@ -209,7 +281,7 @@ async def lifespan(app: FastAPI):
     await mcp_client.shutdown()
 
 
-app = FastAPI(title="RamiBot API", version="3.4", lifespan=lifespan)
+app = FastAPI(title="RamiBot API", version="3.6", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -241,6 +313,7 @@ class ChatRequest(BaseModel):
     team_mode: str = "red"
     disabled_tools: list[str] = []
     require_tool_approval: bool = False
+    response_language: str = "auto"
 
 
 class ToolApprovalRequest(BaseModel):
@@ -471,6 +544,23 @@ async def chat_stream(body: ChatRequest):
 
     kwargs = {"reasoning_enabled": body.reasoning_enabled}
 
+    _LANG_NAMES = {
+        "es": "Spanish (Español)",
+        "en": "English",
+        "fr": "French (Français)",
+        "de": "German (Deutsch)",
+        "pt": "Portuguese (Português)",
+        "it": "Italian (Italiano)",
+    }
+    lang_override = ""
+    if body.response_language and body.response_language != "auto":
+        lang_name = _LANG_NAMES.get(body.response_language, body.response_language)
+        lang_override = (
+            f"\n\nMANDATORY LANGUAGE OVERRIDE: You MUST respond exclusively in {lang_name}. "
+            "This requirement overrides ALL other instructions, including tool output language, "
+            "evidence block language, and system context language. Never respond in any other language."
+        )
+
     mcp_tools = []
     if body.mcp_enabled:
         mcp_tools = await mcp_client.get_all_tools()
@@ -479,7 +569,11 @@ async def chat_stream(body: ChatRequest):
         if mcp_tools:
             kwargs["tools"] = mcp_tools
             prompt, decision = skill_pipeline.build_prompt(body.message, body.team_mode, history)
+            if lang_override:
+                prompt += lang_override
             history.insert(0, {"role": "system", "content": prompt})
+    if not mcp_tools and lang_override:
+        history.insert(0, {"role": "system", "content": lang_override.strip()})
 
     async def event_generator():
         start = time.time()
@@ -567,44 +661,127 @@ async def chat_stream(body: ChatRequest):
                 elif etype == "done":
                     pass
 
+            # ── Hermes-format fallback ────────────────────────────────────────
+            # Some models (Llama/Hermes fine-tunes) emit tool calls as plain-text
+            # <tool_call> XML instead of using the structured tool interface.
+            # If no real tool_calls were captured but the content contains that XML,
+            # parse and execute them so the follow-up generation path runs normally.
+            if not tool_calls_collected and mcp_tools:
+                full_text = "".join(content_parts)
+                hermes_calls = _parse_hermes_tool_calls(full_text, mcp_tools)
+                if hermes_calls:
+                    yield {"event": "clear_content", "data": "{}"}
+                    content_parts.clear()
+                    for tc in hermes_calls:
+                        tool_calls_collected.append(tc)
+                        yield {"event": "tool_call", "data": json.dumps(tc)}
+                        name = tc["name"]
+                        parts = name.split("__", 1)
+                        server_name = parts[0] if len(parts) == 2 else ""
+                        tool_name = parts[1] if len(parts) == 2 else name
+                        args = tc["arguments"]
+                        try:
+                            tool_result = await mcp_client.call_tool(server_name, tool_name, args)
+                            trace = {"tool": name, "arguments": args, "result": tool_result}
+                        except Exception as e:
+                            trace = {"tool": name, "error": str(e)}
+                        tool_traces.append(trace)
+                        yield {"event": "tool_result", "data": json.dumps(trace)}
+            # ─────────────────────────────────────────────────────────────────
+
             if tool_calls_collected and tool_traces and body.mcp_enabled:
                 follow_history = list(history)
+                pending_calls = list(tool_calls_collected)
+                pending_traces = list(tool_traces)
+                MAX_TOOL_HOPS = 8
 
-                # Build assistant message with tool_calls in OpenAI format
-                assistant_msg = {"role": "assistant", "content": "".join(content_parts) or ""}
-                assistant_msg["tool_calls"] = [
-                    {
-                        "id": tc.get("id", f"call_{i}"),
-                        "type": "function",
-                        "function": {
-                            "name": tc["name"],
-                            "arguments": tc["arguments"] if isinstance(tc["arguments"], str) else json.dumps(tc["arguments"]),
-                        },
+                for _hop in range(MAX_TOOL_HOPS):
+                    if not pending_calls:
+                        break
+
+                    # Append assistant message + tool results for this hop
+                    hop_content = "".join(content_parts) or ""
+                    assistant_msg = {
+                        "role": "assistant",
+                        "content": hop_content,
+                        "tool_calls": [
+                            {
+                                "id": tc.get("id", f"call_{i}"),
+                                "type": "function",
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": tc["arguments"] if isinstance(tc["arguments"], str) else json.dumps(tc["arguments"]),
+                                },
+                            }
+                            for i, tc in enumerate(pending_calls)
+                        ],
                     }
-                    for i, tc in enumerate(tool_calls_collected)
-                ]
-                follow_history.append(assistant_msg)
+                    follow_history.append(assistant_msg)
 
-                # Send tool results with role: "tool" and matching tool_call_id
-                for i, trace in enumerate(tool_traces):
-                    tc_id = tool_calls_collected[i].get("id", f"call_{i}") if i < len(tool_calls_collected) else f"call_{i}"
-                    follow_history.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": _format_tool_content(trace),
-                    })
+                    for i, trace in enumerate(pending_traces):
+                        tc_id = pending_calls[i].get("id", f"call_{i}") if i < len(pending_calls) else f"call_{i}"
+                        follow_history.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": _format_tool_content(trace),
+                        })
 
-                content_parts.clear()
-                # Tell frontend to discard initial text and show only tool follow-up
-                yield {"event": "clear_content", "data": "{}"}
-                follow_kwargs = {k: v for k, v in kwargs.items() if k != "tools"}
-                async for event in adapter.stream(follow_history, model, **follow_kwargs):
-                    if event["type"] == "token":
-                        content_parts.append(event["data"])
-                        yield {"event": "token", "data": json.dumps({"token": event["data"]})}
-                    elif event["type"] == "usage":
-                        token_usage = event["data"]
-                        yield {"event": "usage", "data": json.dumps(token_usage)}
+                    content_parts.clear()
+                    if _hop == 0:
+                        yield {"event": "clear_content", "data": "{}"}
+
+                    # Stream next generation (with tools so model can chain further)
+                    next_calls: list = []
+                    next_traces: list = []
+                    async for event in adapter.stream(follow_history, model, **kwargs):
+                        if event["type"] == "token":
+                            content_parts.append(event["data"])
+                            yield {"event": "token", "data": json.dumps({"token": event["data"]})}
+                        elif event["type"] == "tool_call":
+                            tc = event["data"]
+                            next_calls.append(tc)
+                            yield {"event": "tool_call", "data": json.dumps(tc)}
+                            _n = tc["name"]
+                            _p = _n.split("__", 1)
+                            _srv = _p[0] if len(_p) == 2 else ""
+                            _tname = _p[1] if len(_p) == 2 else _n
+                            _args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+                            try:
+                                _res = await mcp_client.call_tool(_srv, _tname, _args)
+                                _trace = {"tool": _n, "arguments": _args, "result": _res}
+                            except Exception as _e:
+                                _trace = {"tool": _n, "error": str(_e)}
+                            next_traces.append(_trace)
+                            tool_traces.append(_trace)
+                            yield {"event": "tool_result", "data": json.dumps(_trace)}
+                        elif event["type"] == "usage":
+                            token_usage = event["data"]
+                            yield {"event": "usage", "data": json.dumps(token_usage)}
+
+                    # Hermes fallback for this hop's content
+                    if not next_calls and mcp_tools:
+                        _follow_text = "".join(content_parts)
+                        _hermes = _parse_hermes_tool_calls(_follow_text, mcp_tools)
+                        if _hermes:
+                            content_parts.clear()
+                            for tc in _hermes:
+                                next_calls.append(tc)
+                                yield {"event": "tool_call", "data": json.dumps(tc)}
+                                _n = tc["name"]
+                                _p = _n.split("__", 1)
+                                _srv = _p[0] if len(_p) == 2 else ""
+                                _tname = _p[1] if len(_p) == 2 else _n
+                                try:
+                                    _res = await mcp_client.call_tool(_srv, _tname, tc["arguments"])
+                                    _trace = {"tool": _n, "arguments": tc["arguments"], "result": _res}
+                                except Exception as _e:
+                                    _trace = {"tool": _n, "error": str(_e)}
+                                next_traces.append(_trace)
+                                tool_traces.append(_trace)
+                                yield {"event": "tool_result", "data": json.dumps(_trace)}
+
+                    pending_calls = next_calls
+                    pending_traces = next_traces
 
             latency = (time.time() - start) * 1000
             content = "".join(content_parts)
@@ -702,6 +879,31 @@ async def delete_mcp_server(server_name: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "deleted"}
+
+
+@app.post("/api/mcp/reload")
+async def reload_mcp_servers():
+    """Stop and reconnect all persisted MCP servers."""
+    servers = await mcp_client.list_servers()
+    results = []
+    for srv in servers:
+        config = MCPServer(
+            name=srv["name"],
+            command=srv.get("command", ""),
+            args=srv.get("args", []),
+            url=srv.get("url"),
+        )
+        # Stop existing connection if live
+        existing = mcp_client.servers.get(config.name)
+        if existing:
+            await existing.stop()
+            mcp_client.servers.pop(config.name, None)
+        try:
+            await mcp_client.reconnect_server(config)
+            results.append({"name": config.name, "status": "ok"})
+        except Exception as e:
+            results.append({"name": config.name, "status": f"error: {e}"})
+    return {"reloaded": len(results), "results": results}
 
 
 @app.get("/api/mcp/all-tools")

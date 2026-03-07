@@ -83,6 +83,30 @@ PHASE_TESTS = [
         "red", "exploit the service and write a report", [],
         "exploit", False,
     ),
+    (
+        "test 8: red + burp suite trigger",
+        "red", "quiero revisar el historial de burp", [],
+        "burp_expert", False,
+    ),
+    (
+        "test 9: blue + web application assessment",
+        "blue", "do a web application assessment with burp", [],
+        "burp_expert", False,
+    ),
+    (
+        "test 10: red + [WEB_SCAN] phase continuity (no re-trigger)",
+        "red", "what should I test next?",
+        [
+            {"role": "user",      "content": "analyze this web app with burp"},
+            {"role": "assistant", "content": "[PROXY] History shows 12 requests.\n[WEB_SCAN] Active."},
+        ],
+        "burp_expert", True,
+    ),
+    (
+        "test 11: red + exploit + burp both match -> exploit wins",
+        "red", "exploit the burp repeater request with a payload", [],
+        "exploit", False,
+    ),
 ]
 
 print("=== Phase / Dominant Skill Tests ===")
@@ -98,6 +122,42 @@ for desc, team, inp, hist, exp_dominant, exp_fallback in PHASE_TESTS:
         f"  phase_hist={decision.phase_from_history!r}"
         f"  activated={decision.activated_skills}\n"
     )
+
+# ---------------------------------------------------------------------------
+# Burp Expert classifier tests
+# ---------------------------------------------------------------------------
+
+BURP_TRIGGERS = [
+    "quiero revisar el historial de burp",
+    "analiza este request con burp repeater",
+    "send to intruder and fuzz the parameter",
+    "intercept the proxy request",
+    "web application testing",
+    "do a web app assessment",
+    "encode this payload for the http request",
+    "get the proxy history for this session",
+]
+
+print("=== Burp Expert Classifier Tests ===")
+for trigger_input in BURP_TRIGGERS:
+    _, dec = pipeline.build_prompt(trigger_input, "red", [])
+    ok = check(f"burp trigger: {trigger_input!r}", dec.dominant_skill, "burp_expert")
+    status = PASS if ok else FAIL
+    print(f"{status} input={trigger_input!r} -> dominant={dec.dominant_skill!r} (want 'burp_expert')")
+
+# Ensure "scan" / "exploit" inputs do NOT route to burp_expert
+BURP_NON_TRIGGERS = [
+    ("red", "scan 192.168.1.1"),           # -> recon
+    ("red", "run metasploit against ftp"),  # -> exploit
+    ("blue", "patch the open ports"),       # -> defense
+]
+for team, non_trigger in BURP_NON_TRIGGERS:
+    _, dec = pipeline.build_prompt(non_trigger, team, [])
+    ok = check(f"non-burp: {non_trigger!r}", dec.dominant_skill != "burp_expert", True)
+    status = PASS if ok else FAIL
+    print(f"{status} non-burp input={non_trigger!r} -> dominant={dec.dominant_skill!r} (want NOT 'burp_expert')")
+
+print()
 
 # ---------------------------------------------------------------------------
 # Target carry-over + execution intent tests (new)
