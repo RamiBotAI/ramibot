@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import useStore from '../store'
-import { X, RotateCw, Terminal as TermIcon, Wifi, WifiOff, Shield } from 'lucide-react'
+import { X, RotateCw, Terminal as TermIcon, Wifi, WifiOff } from 'lucide-react'
 
 const API = '/api/terminal'
 const INPUT_BATCH_MS = 30
@@ -26,8 +26,6 @@ function DockerTerminal({ terminalId, onClose }) {
   const inputTimer = useRef(null)
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
-  const [torActive, setTorActive] = useState(false)
-  const [torLoading, setTorLoading] = useState(false)
   const { dockerContainer, teamMode, setTorActive: setGlobalTorActive, torActive: globalTorActive } = useStore()
   const globalTorRef = useRef(globalTorActive)
   const teamModeRef = useRef(teamMode)
@@ -94,9 +92,7 @@ function DockerTerminal({ terminalId, onClose }) {
       const res = await fetch('/api/docker/tor')
       if (res.ok) {
         const data = await res.json()
-        const active = data.running && data.transparent_proxy
-        setTorActive(active)
-        setGlobalTorActive(active)
+        setGlobalTorActive(data.running && data.transparent_proxy)
       }
     } catch {}
   }, [setGlobalTorActive])
@@ -199,40 +195,6 @@ function DockerTerminal({ terminalId, onClose }) {
     }
     startSession()
   }, [startSession])
-
-  const toggleTor = useCallback(async () => {
-    if (torLoading) return
-    setTorLoading(true)
-    const action = torActive ? 'stop' : 'start'
-    try {
-      const res = await fetch('/api/docker/tor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        const msg = data.detail || 'Tor toggle failed'
-        if (termInstance.current) {
-          termInstance.current.write(`\r\n\x1b[31m[Tor] ${msg}\x1b[0m\r\n`)
-        }
-      } else {
-        const active = data.running && data.transparent_proxy
-        setTorActive(active)
-        setGlobalTorActive(active)
-        if (termInstance.current) {
-          const status = data.running ? 'ON — transparent proxy active' : 'OFF'
-          termInstance.current.write(`\r\n\x1b[36m[Tor] ${status}\x1b[0m\r\n`)
-        }
-      }
-    } catch (e) {
-      if (termInstance.current) {
-        termInstance.current.write(`\r\n\x1b[31m[Tor] ${e.message}\x1b[0m\r\n`)
-      }
-    } finally {
-      setTorLoading(false)
-    }
-  }, [torActive, torLoading, sendRawInput])
 
   // Keep refs in sync
   useEffect(() => { globalTorRef.current = globalTorActive }, [globalTorActive])
@@ -386,18 +348,6 @@ function DockerTerminal({ terminalId, onClose }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', flexShrink: 0 }}>
-          <button
-            onClick={toggleTor}
-            disabled={torLoading || !connected}
-            style={{
-              ...btnStyle,
-              color: torActive ? '#22c55e' : 'var(--t2)',
-              opacity: (torLoading || !connected) ? 0.35 : 1,
-            }}
-            title={torActive ? 'Disable Tor transparent proxy' : 'Enable Tor transparent proxy'}
-          >
-            <Shield size={13} style={torLoading ? { animation: 'pulse-dot 1s infinite' } : {}} />
-          </button>
           <button onClick={reconnect} style={btnStyle} title="Reconnect">
             <RotateCw size={12} />
           </button>

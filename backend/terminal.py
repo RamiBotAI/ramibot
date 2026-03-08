@@ -507,21 +507,15 @@ async def _ensure_torrc(container: str):
             )
 
 
-async def _wait_tor_ready(container: str, timeout: int = 15) -> bool:
-    """Wait for Tor TransPort (9040) to start listening."""
+async def _wait_tor_ready(container: str, timeout: int = 90) -> bool:
+    """Wait until Tor has fully bootstrapped (100%) by tailing its log file."""
     for _ in range(timeout):
         rc, out = await _run_cmd(
-            "docker", "exec", container, "ss", "-tln",
+            "docker", "exec", container,
+            "grep", "-q", "Bootstrapped 100%", "/tmp/tor_bootstrap.log",
             capture_stdout=True,
         )
-        if rc != 0:
-            # ss not available, try netstat
-            rc, out = await _run_cmd(
-                "docker", "exec", container, "netstat", "-tln",
-                capture_stdout=True,
-            )
-        text = out.decode("utf-8", errors="replace")
-        if ":9040" in text:
+        if rc == 0:
             return True
         await asyncio.sleep(1)
     return False
@@ -599,11 +593,14 @@ async def tor_start(container: str) -> dict:
     # 4. Ensure torrc has required directives
     await _ensure_torrc(container)
 
-    # 5. Start tor directly and capture PID
-    # Must use bash -c with double quotes so $! expands to the background PID
+    # 5. Start tor, logging to a file so we can track bootstrap progress
+    await _run_cmd(
+        "docker", "exec", container,
+        "bash", "-c", "rm -f /tmp/tor_bootstrap.log",
+    )
     rc, out = await _run_cmd(
         "docker", "exec", container,
-        "bash", "-c", "tor >/dev/null 2>&1 & echo $!",
+        "bash", "-c", "tor > /tmp/tor_bootstrap.log 2>&1 & echo $!",
         capture_stdout=True,
     )
     if rc != 0:

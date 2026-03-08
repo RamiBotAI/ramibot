@@ -1,15 +1,21 @@
 # Force LF for shell scripts (Docker/Linux)
 *.sh text eol=lf
 
-# Dockerfile must be LF
+# Dockerfile
 Dockerfile text eol=lf
 
-# YAML files
+# YAML
 *.yml text eol=lf
 *.yaml text eol=lf
 
 # Python
 *.py text eol=lf
 
-# Default auto normalization
+# JS / React
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+
+# Default normalization
 * text=auto
