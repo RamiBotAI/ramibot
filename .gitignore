@@ -98,3 +98,9 @@ desktop.ini
 # ============================================================
 mcp-data/
 mcp-reports/
+
+# ============================================================
+# Third-party binaries (not redistributable)
+# ============================================================
+# Burp Suite MCP extension JAR — download from BApp Store
+mcp/*.jar
