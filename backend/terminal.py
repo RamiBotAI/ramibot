@@ -98,6 +98,10 @@ async def _start_container(name: str) -> bool:
 
 
 async def _detect_shell(container: str) -> str:
+    # Prefer zsh (syntax highlighting, autosuggestions) → bash → sh
+    rc, _ = await _run_cmd("docker", "exec", container, "which", "zsh")
+    if rc == 0:
+        return "zsh"
     rc, _ = await _run_cmd("docker", "exec", container, "which", "bash")
     return "bash" if rc == 0 else "sh"
 
@@ -335,17 +339,17 @@ class TerminalSession:
 _sessions: dict[str, TerminalSession] = {}
 
 
-async def create_session(container: str) -> tuple[str | None, str | None, list[str]]:
+async def create_session(container: str) -> tuple[str | None, str | None, list[str], str]:
     """Create a new terminal session.
 
-    Returns (session_id, error_message, info_messages).
+    Returns (session_id, error_message, info_messages, shell).
     On success error_message is None. On failure session_id is None.
     """
     info: list[str] = []
     shell, status = await _validate_and_prepare(container)
     if shell is None:
         # status is the error message
-        return None, status, info
+        return None, status, info, ""
 
     if status == "started":
         info.append(f"Container '{container}' was stopped — started it.")
@@ -391,12 +395,20 @@ async def create_session(container: str) -> tuple[str | None, str | None, list[s
         # Set TERM (needed by curses programs), bold bright-white
         # prompt, then clear screen with raw ANSI escapes (works
         # without TERM).  This wipes startup noise + double prompt.
-        session.write_stdin(
-            b"export TERM=xterm PS1='\\[\\033[1;37m\\]\\u@\\h:\\w\\$ \\[\\033[0m\\]'; printf '\\033[2J\\033[H'\n"
-        )
+        #
+        # zsh uses %n/%m/%~ and %{...%} for non-printing sequences;
+        # bash uses \u/\h/\w and \[...\].  Send the right syntax.
+        if session.shell == "zsh":
+            session.write_stdin(
+                b"export TERM=xterm; PROMPT='%F{white}%B%n@%m:%~%#%b%f '; printf '\\033[2J\\033[H'\n"
+            )
+        else:
+            session.write_stdin(
+                b"export TERM=xterm PS1='\\[\\033[1;37m\\]\\u@\\h:\\w\\$ \\[\\033[0m\\]'; printf '\\033[2J\\033[H'\n"
+            )
 
     _sessions[session_id] = session
-    return session_id, None, info
+    return session_id, None, info, shell
 
 
 def get_session(session_id: str) -> TerminalSession | None:

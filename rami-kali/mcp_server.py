@@ -597,6 +597,7 @@ class ToolRegistry:
                 "extensions": {"type": "string", "description": "File extensions to search (e.g. 'php,html,txt')."},
                 "threads": {"type": "integer", "description": "Number of concurrent threads.", "default": 10},
                 "status_codes": {"type": "string", "description": "Positive status codes (e.g. '200,204,301')."},
+                "proxy": {"type": "string", "description": "HTTP proxy URL (e.g. 'http://host.docker.internal:8080' to route through Burp Suite)."},
             },
             "required": ["target_url"],
         })
@@ -2186,11 +2187,14 @@ class ToolExecutor:
         threads = args.get("threads", 10)
         status_codes = args.get("status_codes", "")
 
+        proxy = args.get("proxy", "")
         cmd = ["gobuster", "dir", "-u", url, "-w", wordlist, "-t", str(int(threads))]
         if extensions:
             cmd += ["-x", InputSanitizer.sanitize_generic(extensions)]
         if status_codes:
             cmd += ["-s", InputSanitizer.sanitize_generic(status_codes)]
+        if proxy:
+            cmd += ["--proxy", InputSanitizer.sanitize_url(proxy)]
 
         stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("gobuster"))
 

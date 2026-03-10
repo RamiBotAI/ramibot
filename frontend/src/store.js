@@ -491,7 +491,7 @@ const useStore = create((set, get) => ({
   },
 
 
-  respondToApproval: async (approved) => {
+  respondToApproval: async (approved, approveAll = false) => {
     const { pendingApproval } = get()
     if (!pendingApproval) return
     set({ pendingApproval: null })
@@ -499,7 +499,7 @@ const useStore = create((set, get) => ({
       await fetch('/api/chat/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approval_id: pendingApproval.approvalId, approved }),
+        body: JSON.stringify({ approval_id: pendingApproval.approvalId, approved, approve_all: approveAll }),
       })
     } catch (e) {
       console.error('Failed to respond to approval:', e)

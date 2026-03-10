@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.6-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.7-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,9 +26,9 @@
 </p>
 
 
-# RamiBot v3.6
+# RamiBot v3.7
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, and **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, and **proxychains4 proxy routing** with ready-made Burp and Tor profiles.
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -309,7 +309,8 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 | Category | Example tools |
 |----------|---------------|
 | Recon | nmap, masscan, whois, theHarvester, amass, subfinder, dnsx |
-| Web | nikto, gobuster, ffuf, sqlmap, whatweb, wafw00f |
+| Web | nikto, gobuster, ffuf, nuclei, sqlmap, whatweb, wafw00f |
+| Proxy routing | proxychains4 (Burp profile + Tor profile) |
 | Exploit | metasploit-framework, searchsploit, msfvenom |
 | Credential | hydra, medusa, hashcat, john, crackmapexec |
 | SMB / AD | enum4linux, smbclient, bloodhound, impacket suite |
@@ -319,6 +320,24 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 ### Knowledge Base
 
 `rami-kali/knowledge/` contains 27 structured Markdown files used by the MCP server to prepend tactical context to tool results. Categories include: tool usage guides, MITRE ATT&CK mappings, result interpretation guides, and operational checklists.
+
+### Proxy Routing (proxychains4)
+
+The container ships with two ready-made proxychains4 profiles for routing tool traffic through Burp Suite or Tor without modifying any tool configuration:
+
+| Mode | Command | Result |
+|------|---------|--------|
+| Analysis only | `proxychains <tool>` | Routes through Burp on Windows host |
+| Anonymity only | `proxychains -f /etc/proxychains4-tor.conf <tool>` | Routes through Tor inside the container |
+| Analysis + anonymity | Start Tor in RamiBot → configure Burp SOCKS upstream → `proxychains <tool>` | tool → Burp → Tor → internet |
+
+**Burp → Tor chaining:** In Burp Suite, go to **Settings → Network → Connections → SOCKS proxy** and set `127.0.0.1:9050`. This works because the container uses `network_mode: host`, so `127.0.0.1` resolves to the Windows host running Tor.
+
+Profile paths inside the container:
+- `/etc/proxychains4.conf` — routes through Burp (default `proxychains` command)
+- `/etc/proxychains4-tor.conf` — routes directly through Tor TransPort
+
+The `gobuster_dir` MCP tool accepts a `proxy` parameter to route directory bruteforce traffic through a specific proxy (e.g., `http://127.0.0.1:8080` for Burp or `socks5://127.0.0.1:9050` for Tor).
 
 ### Quick Start
 
@@ -347,7 +366,7 @@ RamiBot includes a browser-based terminal connected to a Docker container via `d
 ### Platform Behavior
 
 - **Unix**: `pty.openpty()` for full PTY allocation. Supports interactive programs (vim, tmux, etc.), resize events, and full ANSI rendering.
-- **Windows**: Pipe-based communication (`docker exec -i`). Uses `script` utility for PTY emulation if available; falls back to plain bash.
+- **Windows**: Pipe-based communication (`docker exec -i`). Uses `script` utility for PTY emulation if available; falls back to plain bash. Shell detection in `terminal.py` prefers **zsh → bash → sh**. The rami-kali container runs zsh by default with `zsh-syntax-highlighting` (valid commands turn green, invalid turn red) and `zsh-autosuggestions` (press Tab or → to accept suggestions from history).
 
 ### Session Lifecycle
 
@@ -490,7 +509,7 @@ make rami-kali-stop      # stop the container
 make rami-kali-logs      # follow logs
 make rami-kali-build     # rebuild after changes
 
-docker exec -it rami-kali bash   # open a shell inside
+docker exec -it rami-kali zsh    # open a zsh shell inside
 ```
 
 ---

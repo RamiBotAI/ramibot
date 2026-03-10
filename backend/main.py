@@ -281,7 +281,7 @@ async def lifespan(app: FastAPI):
     await mcp_client.shutdown()
 
 
-app = FastAPI(title="RamiBot API", version="3.6", lifespan=lifespan)
+app = FastAPI(title="RamiBot API", version="3.7", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -319,6 +319,7 @@ class ChatRequest(BaseModel):
 class ToolApprovalRequest(BaseModel):
     approval_id: str
     approved: bool
+    approve_all: bool = False
 
 
 class MCPServerCreate(BaseModel):
@@ -582,6 +583,7 @@ async def chat_stream(body: ChatRequest):
         tool_calls_collected = []
         tool_traces = []
         my_approval_ids: list[str] = []
+        skip_approvals = False  # set to True when user clicks "Approve All"
 
         try:
             async for event in adapter.stream(history, model, **kwargs):
@@ -607,7 +609,7 @@ async def chat_stream(body: ChatRequest):
 
                         # ── Approval gate ──────────────────────────────────
                         execute_tool = True
-                        if body.require_tool_approval:
+                        if body.require_tool_approval and not skip_approvals:
                             approval_id = str(uuid.uuid4())
                             approval_event = asyncio.Event()
                             _pending_approvals[approval_id] = {
@@ -631,6 +633,8 @@ async def chat_stream(body: ChatRequest):
                             try:
                                 await asyncio.wait_for(approval_event.wait(), timeout=120)
                                 execute_tool = _pending_approvals[approval_id].get("approved", False)
+                                if execute_tool and _pending_approvals[approval_id].get("approve_all", False):
+                                    skip_approvals = True
                             except asyncio.TimeoutError:
                                 _pending_approvals[approval_id]["expired"] = True
                                 execute_tool = False
@@ -819,6 +823,7 @@ async def chat_approve(body: ToolApprovalRequest):
     if not entry:
         raise HTTPException(status_code=404, detail="Approval not found or expired")
     entry["approved"] = body.approved
+    entry["approve_all"] = body.approve_all
     entry["event"].set()
     return {"status": "ok"}
 
@@ -1020,10 +1025,10 @@ class TerminalStopRequest(BaseModel):
 @app.post("/api/terminal/start")
 async def terminal_start(body: TerminalStartRequest):
     container = body.container or get_docker_container()
-    session_id, error, info = await create_session(container)
+    session_id, error, info, shell = await create_session(container)
     if error:
         raise HTTPException(status_code=400, detail=error)
-    return {"session_id": session_id, "info": info}
+    return {"session_id": session_id, "info": info, "shell": shell}
 
 
 @app.get("/api/terminal/stream")

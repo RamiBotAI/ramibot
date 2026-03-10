@@ -182,7 +182,7 @@ function ToolApprovalBanner() {
 
         <button
           disabled={timedOut}
-          onClick={() => respondToApproval(true)}
+          onClick={() => respondToApproval(true, false)}
           style={{
             fontFamily: 'var(--font-display)', fontSize: '0.6rem',
             letterSpacing: '0.14em', textTransform: 'uppercase',
@@ -198,6 +198,26 @@ function ToolApprovalBanner() {
           onMouseLeave={e => { if (!timedOut) e.currentTarget.style.background = `${color}18` }}
         >
           APPROVE
+        </button>
+
+        <button
+          disabled={timedOut}
+          onClick={() => respondToApproval(true, true)}
+          style={{
+            fontFamily: 'var(--font-display)', fontSize: '0.6rem',
+            letterSpacing: '0.14em', textTransform: 'uppercase',
+            padding: '0.3rem 0.8rem',
+            background: timedOut ? 'transparent' : `${color}30`,
+            border: `1px solid ${color}99`,
+            color: timedOut ? 'var(--t3)' : color,
+            cursor: timedOut ? 'not-allowed' : 'pointer',
+            borderRadius: 0,
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => { if (!timedOut) e.currentTarget.style.background = `${color}48` }}
+          onMouseLeave={e => { if (!timedOut) e.currentTarget.style.background = `${color}30` }}
+        >
+          APPROVE ALL
         </button>
       </div>
     </div>

@@ -61,7 +61,7 @@ docker compose build && docker compose up
 docker compose logs -f
 
 # Open a shell inside the container (for debugging)
-docker compose exec mcp-server bash
+docker compose exec mcp-server zsh
 
 # Stop
 docker compose down
@@ -167,21 +167,22 @@ docker compose up
 
 ---
 
-## Installed Tools (~60 installable)
+## Installed Tools (~80 installable)
 
 The container includes these Kali tools (auto-detected at startup):
 
 | Category | Tools |
 |---|---|
-| **Recon** | nmap, whatweb, whois, dig, searchsploit |
-| **Web Scanning** | gobuster, nikto, dirb, wfuzz, wpscan, joomscan, zap-cli, droopescan |
+| **Recon** | nmap, masscan, whatweb, whois, dig, theHarvester, amass, subfinder, dnsx, searchsploit |
+| **Web Scanning** | gobuster, ffuf, nuclei, nikto, dirb, wfuzz, wpscan, joomscan, zap-cli, droopescan |
 | **Exploitation** | sqlmap, metasploit (msfconsole, msfvenom) |
 | **Credential Attacks** | hydra, medusa, ncrack, patator, hashcat, john, crunch, cewl |
 | **SMB / AD** | enum4linux, smbclient, smbmap, rpcclient, crackmapexec, evil-winrm, bloodhound, impacket (psexec.py, wmiexec.py, smbexec.py, secretsdump.py) |
 | **MITM** | bettercap, ettercap, responder, mitmproxy, arpspoof, dnsspoof, sslstrip, yersinia |
 | **Wireless** | aircrack-ng, reaver, bully, wifite, kismet, mdk4, pixiewps, cowpatty |
 | **C2 / Social Engineering** | armitage, veil, beef-xss, setoolkit |
-| **Network** | tshark, tcpdump, ngrep, hping3, fragrouter, macchanger, netcat |
+| **Proxy Routing** | proxychains4 (Burp profile `/etc/proxychains4.conf` + Tor profile `/etc/proxychains4-tor.conf`) |
+| **Network** | tshark, tcpdump, ngrep, hping3, fragrouter, macchanger, netcat, socat |
 | **Wordlists** | rockyou.txt, SecLists, dirb lists |
 
 Tools not installed are automatically hidden from the MCP tool list.
@@ -194,13 +195,54 @@ The following tools from the registry **cannot run** in a Docker container and a
 |---|---|
 | `mimikatz` | Windows-only binary |
 | `cobaltstrike` | Commercial license required |
-| `burpsuite` | GUI-only (community edition requires Java GUI) |
+| `burpsuite` | Runs on the Windows host separately; its MCP server is added as an independent server in RamiBot — not part of rami-kali |
 | `powersploit` | PowerShell modules, not a Linux binary |
 | `empire` | Deprecated / complex install |
 | `shellter` | Windows PE injector (Wine-dependent) |
 | `xhydra` | GTK GUI, useless headless |
 | `pyrit`, `ewsa` | Deprecated / unavailable in repos |
 | `wifiphisher`, `fluxion`, `airgeddon`, `wifi-honey`, `ghost-phisher`, `fern-wifi-cracker` | Not in Kali repos or require GUI |
+
+### Shell Environment
+
+The container runs **zsh** as the default shell with:
+
+- **`zsh-syntax-highlighting`**: commands turn green when valid, red when invalid — real-time feedback before you press Enter
+- **`zsh-autosuggestions`**: suggests commands from history; press Tab or → to accept
+
+When RamiBot's Docker Terminal opens a session it detects the shell in order: **zsh → bash → sh**.
+
+```bash
+# Open an interactive zsh session
+docker exec -it rami-kali zsh
+```
+
+### Proxy Routing (proxychains4)
+
+Two ready-made profiles are installed for routing tool traffic without modifying tool configuration:
+
+| Profile | Path | Target |
+|---------|------|--------|
+| Burp | `/etc/proxychains4.conf` | `127.0.0.1:8080` (Windows host Burp proxy) |
+| Tor | `/etc/proxychains4-tor.conf` | `127.0.0.1:9050` (Tor SOCKS in container) |
+
+**Usage:**
+
+```bash
+# Route through Burp for traffic analysis
+proxychains nmap -sV 10.10.10.1
+
+# Route through Tor for anonymity
+proxychains -f /etc/proxychains4-tor.conf curl https://example.com
+
+# Chain tool → Burp → Tor (configure Burp SOCKS upstream first)
+# In Burp: Settings → Network → Connections → SOCKS proxy → 127.0.0.1:9050
+proxychains nmap -sV 10.10.10.1
+```
+
+The `gobuster_dir` MCP tool accepts a `proxy` parameter to route directory bruteforce through a proxy directly (e.g., `http://127.0.0.1:8080` for Burp or `socks5://127.0.0.1:9050` for Tor) — no proxychains required for that tool.
+
+Because the container uses `network_mode: host`, `127.0.0.1` inside the container resolves to the Windows/Linux host, so Burp running on the host is reachable at `127.0.0.1:8080`.
 
 ### Wireless Tools Caveat
 

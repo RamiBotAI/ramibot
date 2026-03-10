@@ -9,10 +9,15 @@ import { X, RotateCw, Terminal as TermIcon, Wifi, WifiOff } from 'lucide-react'
 const API = '/api/terminal'
 const INPUT_BATCH_MS = 30
 
-// Returns the export PS1 command for the given tor/team state
-const buildPS1Cmd = (tor, team) => {
-  const color = tor ? '35' : team === 'red' ? '31' : '34'
-  return `export PS1='\\[\\e[${color}m\\]\\u@\\h:\\w\\$\\[\\e[0m\\] '\r`
+// Returns the prompt command for the given shell / tor / team state.
+// zsh uses PROMPT with %F{color} syntax; bash uses PS1 with \[\e[Xm\] syntax.
+const buildPromptCmd = (shell, tor, team) => {
+  const ansiCode = tor ? '35' : team === 'red' ? '31' : '34'
+  if (shell === 'zsh') {
+    const zshColor = tor ? 'magenta' : team === 'red' ? 'red' : 'blue'
+    return `PROMPT='%F{${zshColor}}%B%n@%m:%~%#%b%f '; clear\r`
+  }
+  return `export PS1='\\[\\e[1;${ansiCode}m\\]\\u@\\h:\\w\\$\\[\\e[0m\\] '; clear\r`
 }
 
 function DockerTerminal({ terminalId, onClose }) {
@@ -20,6 +25,7 @@ function DockerTerminal({ terminalId, onClose }) {
   const termInstance = useRef(null)
   const fitAddon = useRef(null)
   const sessionRef = useRef(null)
+  const shellRef = useRef('zsh')
   const sseRef = useRef(null)
   const disposed = useRef(false)
   const inputBuffer = useRef('')
@@ -128,8 +134,9 @@ function DockerTerminal({ terminalId, onClose }) {
         setConnecting(false)
         return
       }
-      const { session_id, info } = await res.json()
+      const { session_id, info, shell } = await res.json()
       sessionRef.current = session_id
+      shellRef.current = shell || 'zsh'
 
       // Print info messages (e.g. container was started)
       if (termInstance.current && info) {
@@ -170,9 +177,9 @@ function DockerTerminal({ terminalId, onClose }) {
         setConnecting(false)
         connectedRef.current = true
         fetchTorStatus()
-        // Always apply team/tor colored PS1 when terminal connects
+        // Always apply team/tor colored prompt when terminal connects
         setTimeout(() => {
-          sendRawInput(buildPS1Cmd(globalTorRef.current, teamModeRef.current))
+          sendRawInput(buildPromptCmd(shellRef.current, globalTorRef.current, teamModeRef.current))
         }, 800)
       }
 
@@ -201,10 +208,10 @@ function DockerTerminal({ terminalId, onClose }) {
   useEffect(() => { teamModeRef.current = teamMode }, [teamMode])
   useEffect(() => { connectedRef.current = connected }, [connected])
 
-  // Re-apply PS1 whenever Tor or team mode changes
+  // Re-apply prompt whenever Tor or team mode changes
   useEffect(() => {
     if (!sessionRef.current) return
-    sendRawInput('\x03\r' + buildPS1Cmd(globalTorActive, teamMode))
+    sendRawInput('\x03\r' + buildPromptCmd(shellRef.current, globalTorActive, teamMode))
   }, [globalTorActive, teamMode, sendRawInput])
 
   useEffect(() => {

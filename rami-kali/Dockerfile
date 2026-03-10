@@ -18,6 +18,11 @@ LABEL version="2.1.0"
 # ── Avoid interactive prompts during install ────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ── Force official Kali mirror — CDN mirrors (mirror.es.cdn-perfprod.com etc.)
+#    have intermittent SSL failures; http.kali.org is authoritative and stable.
+RUN echo "deb http://kali.download/kali kali-rolling main non-free contrib" > /etc/apt/sources.list \
+    && echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80retries
+
 # ── 1. System update + core utilities ───────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -48,14 +53,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         dnsutils \
         whatweb \
         exploitdb \
+        theharvester \
         \
         # ── Active scanning ─────────────────────────────── \
         nmap \
+        masscan \
         nikto \
         gobuster \
+        ffuf \
         dirb \
         wfuzz \
         enum4linux \
+        nuclei \
+        \
+        # ── Proxy routing ───────────────────────────────── \
+        proxychains4 \
         \
         # ── Exploitation / brute-force ──────────────────── \
         hydra \
@@ -127,7 +139,94 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         wordlists \
     && rm -rf /var/lib/apt/lists/*
 
-# ── 3. pip-only tools (not in Kali repos) ───────────────────────────────────
+# ── 3. Quality-of-life / shell comfort tools ───────────────────────────────
+#
+# Standard utilities present in a normal Kali install that
+# --no-install-recommends strips out.
+#
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        \
+        # ── Editors ─────────────────────────────────────── \
+        nano \
+        vim-tiny \
+        \
+        # ── Network utilities ───────────────────────────── \
+        iputils-ping \
+        net-tools \
+        iproute2 \
+        dnsutils \
+        traceroute \
+        telnet \
+        socat \
+        openssh-client \
+        \
+        # ── Shell / terminal comfort ─────────────────────── \
+        zsh \
+        zsh-syntax-highlighting \
+        zsh-autosuggestions \
+        bash-completion \
+        less \
+        tree \
+        file \
+        lsof \
+        procps \
+        man-db \
+        \
+        # ── Archive / transfer ───────────────────────────── \
+        zip \
+        unzip \
+        p7zip-full \
+        rsync \
+        \
+        # ── Misc dev tools ───────────────────────────────── \
+        jq \
+        xxd \
+        binutils \
+        tmux \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Shell history + readline (arrow-up navigation in terminal) ──────────────
+RUN echo 'export HISTFILE=/root/.bash_history' >> /root/.bashrc \
+    && echo 'export HISTSIZE=5000' >> /root/.bashrc \
+    && echo 'export HISTFILESIZE=10000' >> /root/.bashrc \
+    && echo 'export HISTCONTROL=ignoredups:erasedups' >> /root/.bashrc \
+    && echo 'shopt -s histappend' >> /root/.bashrc \
+    && echo 'PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"' >> /root/.bashrc \
+    && echo 'source /usr/share/bash-completion/bash_completion 2>/dev/null || true' >> /root/.bashrc
+
+# proxychains4 configs:
+#   proxychains <tool>                                    → Burp en Windows (análisis, sin anonimato)
+#   proxychains -f /etc/proxychains4-tor.conf <tool>     → Tor dentro del contenedor (anónimo, sin análisis Burp)
+#
+#   Para análisis Burp + anonimato Tor (mejor opción):
+#     1. Activa Tor desde RamiBot (expone SOCKS en 127.0.0.1:9050 vía network_mode:host)
+#     2. En Burp Suite (Windows): Settings → Network → Connections → SOCKS proxy → 127.0.0.1:9050
+#     3. Usa proxychains normalmente → tool → Burp → Tor → internet
+RUN sed -i 's/^socks4\s.*/# &/' /etc/proxychains4.conf \
+    && echo 'http    host.docker.internal  8080' >> /etc/proxychains4.conf \
+    && cp /etc/proxychains4.conf /etc/proxychains4-tor.conf \
+    && sed -i 's/^http.*/# &/' /etc/proxychains4-tor.conf \
+    && echo 'socks5  127.0.0.1  9050' >> /etc/proxychains4-tor.conf
+
+# inputrc: arrow-up/down search history by prefix already typed (bash fallback)
+RUN printf '"\e[A": history-search-backward\n"\e[B": history-search-forward\n"\eOA": history-search-backward\n"\eOB": history-search-forward\nset show-all-if-ambiguous on\nset completion-ignore-case on\n' > /root/.inputrc
+
+# zsh config: syntax highlighting + autosuggestions + history navigation
+RUN echo 'source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' >> /root/.zshrc \
+    && echo 'source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh' >> /root/.zshrc \
+    && echo 'export HISTFILE=/root/.zsh_history' >> /root/.zshrc \
+    && echo 'export HISTSIZE=5000' >> /root/.zshrc \
+    && echo 'export SAVEHIST=10000' >> /root/.zshrc \
+    && echo 'setopt HIST_IGNORE_DUPS HIST_APPEND INC_APPEND_HISTORY SHARE_HISTORY' >> /root/.zshrc \
+    && echo 'autoload -Uz compinit && compinit' >> /root/.zshrc \
+    && echo 'bindkey "^[[A" history-search-backward' >> /root/.zshrc \
+    && echo 'bindkey "^[[B" history-search-forward' >> /root/.zshrc \
+    && echo 'bindkey "^[OA" history-search-backward' >> /root/.zshrc \
+    && echo 'bindkey "^[OB" history-search-forward' >> /root/.zshrc \
+    && echo 'ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=8"' >> /root/.zshrc \
+    && chsh -s /bin/zsh root
+
+# ── pip-only tools (not in Kali repos) ───────────────────────────────────
 RUN pip3 install --no-cache-dir --break-system-packages \
         droopescan \
     || echo "pip installs partially failed (non-fatal)"
