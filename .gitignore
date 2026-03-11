@@ -99,6 +99,16 @@ desktop.ini
 mcp-data/
 mcp-reports/
 
+
+# ============================================================
+# Rami-kali
+# ============================================================
+
+rami-kali/LICENSE
+rami-kali/.gitignore
+rami-kali/.gitattributes
+rami-kali/.git
+
 # ============================================================
 # Third-party binaries (not redistributable)
 # ============================================================

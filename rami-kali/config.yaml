@@ -69,3 +69,11 @@ tools:
     timeout: 600
   wpscan:
     timeout: 600
+  masscan:
+    timeout: 300
+  ffuf:
+    timeout: 300
+  nuclei:
+    timeout: 600
+  theharvester:
+    timeout: 300

@@ -493,6 +493,12 @@ TOOL_BINARY_MAP: dict[str, str] = {
     "cowpatty": "cowpatty",
     "pyrit": "pyrit",
     "ewsa": "ewsa",
+
+    # v3.7 tools
+    "masscan_scan": "masscan",
+    "ffuf_fuzz": "ffuf",
+    "nuclei_scan": "nuclei",
+    "theharvester_recon": "theHarvester",
 }
 
 
@@ -1237,6 +1243,102 @@ class ToolRegistry:
                 "proxy": {"type": "string", "description": "Proxy a usar"},
             },
             "required": ["target_url"],
+        })
+
+        # ========= v3.7 TOOLS =========
+
+        self._add("masscan_scan", "High-speed TCP port scanner. Much faster than nmap for large ranges.", {
+            "properties": {
+                "target": {"type": "string", "description": "IP, CIDR range, or hostname to scan."},
+                "ports": {
+                    "type": "string",
+                    "description": "Port range to scan (e.g. '1-65535', '80,443,8080', '0-1000').",
+                    "default": "1-1000",
+                },
+                "rate": {
+                    "type": "integer",
+                    "description": "Packets per second. Higher = faster but noisier. Max ~1000000.",
+                    "default": 1000,
+                },
+                "extra_args": {"type": "string", "description": "Additional masscan arguments."},
+            },
+            "required": ["target"],
+        })
+
+        self._add("ffuf_fuzz", "Fast web fuzzer for directory, file, parameter, and vhost discovery.", {
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Target URL with FUZZ keyword placeholder (e.g. 'http://host/FUZZ').",
+                },
+                "wordlist": {
+                    "type": "string",
+                    "description": "Path to wordlist.",
+                    "default": "/usr/share/wordlists/dirb/common.txt",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["dir", "vhost", "param"],
+                    "description": "Fuzzing mode: dir=path fuzzing, vhost=virtual host discovery, param=GET param fuzzing.",
+                    "default": "dir",
+                },
+                "extensions": {"type": "string", "description": "File extensions to append (e.g. 'php,html')."},
+                "threads": {"type": "integer", "description": "Number of concurrent threads.", "default": 40},
+                "filter_codes": {
+                    "type": "string",
+                    "description": "HTTP status codes to filter OUT (e.g. '404,403').",
+                    "default": "404",
+                },
+                "match_codes": {"type": "string", "description": "HTTP status codes to match (e.g. '200,301')."},
+                "proxy": {"type": "string", "description": "HTTP proxy (e.g. 'http://host.docker.internal:8080')."},
+                "extra_args": {"type": "string", "description": "Additional ffuf arguments."},
+            },
+            "required": ["url"],
+        })
+
+        self._add("nuclei_scan", "Vulnerability scanner using community templates. Fast and accurate.", {
+            "properties": {
+                "target": {"type": "string", "description": "Target URL or IP to scan."},
+                "templates": {
+                    "type": "string",
+                    "description": "Template tags or paths to use (e.g. 'cve', 'misconfig', 'exposures', '/path/to/template.yaml').",
+                },
+                "severity": {
+                    "type": "string",
+                    "enum": ["info", "low", "medium", "high", "critical"],
+                    "description": "Minimum severity level to report.",
+                },
+                "rate_limit": {
+                    "type": "integer",
+                    "description": "Max requests per second.",
+                    "default": 150,
+                },
+                "proxy": {"type": "string", "description": "HTTP proxy URL."},
+                "extra_args": {"type": "string", "description": "Additional nuclei arguments."},
+            },
+            "required": ["target"],
+        })
+
+        self._add("theharvester_recon", "OSINT tool for email, subdomain, host, and employee name harvesting.", {
+            "properties": {
+                "domain": {"type": "string", "description": "Domain to gather information about."},
+                "sources": {
+                    "type": "string",
+                    "description": "Data sources to query (e.g. 'google,bing,linkedin,shodan'). Use 'all' for all sources.",
+                    "default": "google,bing,crtsh",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to retrieve.",
+                    "default": 100,
+                },
+                "dns_brute": {
+                    "type": "boolean",
+                    "description": "Perform DNS brute force on the domain.",
+                    "default": False,
+                },
+            },
+            "required": ["domain"],
         })
 
 
@@ -3277,6 +3379,114 @@ class ToolExecutor:
             cmd += ["--proxy", args["proxy"]]
         
         stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("cewl"))
+        return self._ok(stdout if stdout else stderr)
+
+    # ── v3.7 tools ──────────────────────────────────────────────────────────
+
+    async def _tool_masscan_scan(self, args: dict) -> dict:
+        target = InputSanitizer.sanitize_target(args["target"])
+        self._scope_check(target)
+        ports = InputSanitizer.sanitize_generic(args.get("ports", "1-1000"))
+        rate = max(1, min(1000000, int(args.get("rate", 1000))))
+        extra = args.get("extra_args", "")
+
+        cmd = ["masscan", target, "-p", ports, "--rate", str(rate), "--open"]
+        if extra:
+            try:
+                cmd += shlex.split(InputSanitizer.sanitize_generic(extra))
+            except ValueError as e:
+                return self._error(f"Invalid extra_args: {e}")
+
+        stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("masscan"))
+        return self._ok(stdout if stdout else stderr)
+
+    async def _tool_ffuf_fuzz(self, args: dict) -> dict:
+        url = InputSanitizer.sanitize_url(args["url"])
+        if "FUZZ" not in url:
+            url = url.rstrip("/") + "/FUZZ"
+        wordlist = InputSanitizer.sanitize_path(
+            args.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
+        )
+        mode = args.get("mode", "dir")
+        threads = max(1, min(200, int(args.get("threads", 40))))
+        filter_codes = args.get("filter_codes", "404")
+        match_codes = args.get("match_codes", "")
+        extensions = args.get("extensions", "")
+        proxy = args.get("proxy", "")
+        extra = args.get("extra_args", "")
+
+        cmd = ["ffuf", "-u", url, "-w", wordlist, "-t", str(threads), "-of", "json"]
+
+        if mode == "vhost":
+            cmd += ["-H", f"Host: FUZZ.{url.split('/')[2]}"]
+        elif mode == "param":
+            cmd += ["-X", "GET"]
+
+        if extensions:
+            cmd += ["-e", InputSanitizer.sanitize_generic(extensions)]
+        if filter_codes:
+            cmd += ["-fc", InputSanitizer.sanitize_generic(filter_codes)]
+        if match_codes:
+            cmd += ["-mc", InputSanitizer.sanitize_generic(match_codes)]
+        if proxy:
+            cmd += ["-x", InputSanitizer.sanitize_url(proxy)]
+        if extra:
+            try:
+                cmd += shlex.split(InputSanitizer.sanitize_generic(extra))
+            except ValueError as e:
+                return self._error(f"Invalid extra_args: {e}")
+
+        stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("ffuf"))
+        # ffuf outputs JSON — try to parse and summarise hits
+        try:
+            data = json.loads(stdout)
+            results = data.get("results", [])
+            if results:
+                summary = [
+                    f"{r['status']} {r['length']}B  {r['url']}"
+                    for r in results
+                ]
+                return self._ok(f"ffuf found {len(results)} result(s):\n" + "\n".join(summary))
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return self._ok(stdout if stdout else stderr)
+
+    async def _tool_nuclei_scan(self, args: dict) -> dict:
+        target = InputSanitizer.sanitize_url(args["target"])
+        templates = args.get("templates", "")
+        severity = args.get("severity", "")
+        rate_limit = max(1, min(500, int(args.get("rate_limit", 150))))
+        proxy = args.get("proxy", "")
+        extra = args.get("extra_args", "")
+
+        cmd = ["nuclei", "-u", target, "-rl", str(rate_limit), "-silent"]
+
+        if templates:
+            cmd += ["-t", InputSanitizer.sanitize_generic(templates)]
+        if severity:
+            cmd += ["-severity", InputSanitizer.sanitize_generic(severity)]
+        if proxy:
+            cmd += ["-proxy", InputSanitizer.sanitize_url(proxy)]
+        if extra:
+            try:
+                cmd += shlex.split(InputSanitizer.sanitize_generic(extra))
+            except ValueError as e:
+                return self._error(f"Invalid extra_args: {e}")
+
+        stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("nuclei"))
+        return self._ok(stdout if stdout else stderr)
+
+    async def _tool_theharvester_recon(self, args: dict) -> dict:
+        domain = InputSanitizer.sanitize_target(args["domain"])
+        sources = InputSanitizer.sanitize_generic(args.get("sources", "google,bing,crtsh"))
+        limit = max(1, min(500, int(args.get("limit", 100))))
+        dns_brute = args.get("dns_brute", False)
+
+        cmd = ["theHarvester", "-d", domain, "-b", sources, "-l", str(limit)]
+        if dns_brute:
+            cmd += ["-c"]
+
+        stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("theharvester"))
         return self._ok(stdout if stdout else stderr)
 
 
