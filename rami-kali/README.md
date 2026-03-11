@@ -1,6 +1,6 @@
-# Red Team MCP Server
+# Rami-Kali MCP Server
 
-MCP (Model Context Protocol) server that wraps Kali Linux penetration testing tools for authorized security assessments. Designed to be driven by a local LLM via LM Studio.
+Rami-Kali MCP (Model Context Protocol) server that wraps Kali Linux penetration testing tools for authorized security assessments. Designed to be driven by a local LLM via LM Studio.
 
 > **For AUTHORIZED penetration testing, CTF competitions, and security research ONLY.**
 
