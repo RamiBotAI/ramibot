@@ -174,6 +174,7 @@ The container includes these Kali tools (auto-detected at startup):
 | Category | Tools |
 |---|---|
 | **Recon** | nmap, masscan, whatweb, whois, dig, theHarvester, amass, subfinder, dnsx, searchsploit |
+| **CVE Intelligence** | cve_lookup (NVD API — CVSS, description, CPEs, references for any CVE ID or keyword) |
 | **Web Scanning** | gobuster, ffuf, nuclei, nikto, dirb, wfuzz, wpscan, joomscan, zap-cli, droopescan |
 | **Exploitation** | sqlmap, metasploit (msfconsole, msfvenom) |
 | **Credential Attacks** | hydra, medusa, ncrack, patator, hashcat, john, crunch, cewl |
@@ -272,6 +273,8 @@ knowledge/
   tactics/*.md            — Phase-by-phase methodology
 ```
 
+The `tools/cve_lookup.md` file provides the LLM with NVD query strategy, CVSS severity bands, evidence rules specific to CVE data, and chaining workflows (nmap version → cve_lookup → searchsploit).
+
 See `knowledge/README.md` for the full structure and integration guide.
 
 ---
@@ -295,7 +298,7 @@ rami-kali/
 ├── .dockerignore           ← Build context exclusions
 ├── config.yaml             ← Server configuration
 ├── requirements.txt        ← Python dependencies
-├── mcp_server.py           ← MCP server (2800+ lines, 41 registered tools)
+├── mcp_server.py           ← MCP server (2800+ lines, 45 registered tools)
 ├── knowledge/              ← Tactical knowledge base (27 files)
 │   ├── core_principles.md
 │   ├── pivot_map.md

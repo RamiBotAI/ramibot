@@ -35,6 +35,9 @@ import signal
 import socket
 import sqlite3
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -499,6 +502,8 @@ TOOL_BINARY_MAP: dict[str, str] = {
     "ffuf_fuzz": "ffuf",
     "nuclei_scan": "nuclei",
     "theharvester_recon": "theHarvester",
+    # Intelligence
+    "cve_lookup": None,  # HTTP-only, no binary needed
 }
 
 
@@ -688,6 +693,34 @@ class ToolRegistry:
             },
             "required": ["query"],
         })
+
+        self._add(
+            "cve_lookup",
+            "Look up CVE details from the NVD (National Vulnerability Database). "
+            "Accepts a specific CVE ID (e.g. CVE-2021-44228) or a keyword search. "
+            "Returns CVSS score, severity, description, affected products and references.",
+            {
+                "properties": {
+                    "cve_id": {
+                        "type": "string",
+                        "description": "CVE identifier to look up (e.g. 'CVE-2021-44228'). "
+                                       "Mutually exclusive with keyword.",
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "Keyword or product name to search CVEs for "
+                                       "(e.g. 'log4j', 'apache struts 2.5'). "
+                                       "Mutually exclusive with cve_id.",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return for keyword searches (1-20).",
+                        "default": 5,
+                    },
+                },
+                "required": [],
+            },
+        )
 
         self._add("hashcat_crack", "GPU/CPU password cracking with Hashcat. [HIGH RISK]", {
             "properties": {
@@ -1598,6 +1631,11 @@ class EvidenceValidator:
             re.compile(r"\[HTTP\].*NTLMv\d", re.I),
             re.compile(r"Hash\s*:\s*\S+", re.I),
         ],
+        "cve_lookup": [
+            re.compile(r"CVE ID\s*:\s*(CVE-\d{4}-\d+)", re.I),
+            re.compile(r"CVSSv[\d.]+\s*:\s*[\d.]+\s*\(\w+\)", re.I),
+            re.compile(r"Status\s*:\s*\w+", re.I),
+        ],
     }
 
     # Tools whose parsed "findings" are informational, not confirmed vulns
@@ -1823,6 +1861,7 @@ class KnowledgeLoader:
         # Exploitation
         "sqlmap_scan":        "tools/sqlmap.md",
         "searchsploit_query": "tools/searchsploit.md",
+        "cve_lookup":         "tools/cve_lookup.md",
         "msf_console":        "tools/metasploit.md",
         "msfvenom":           "tools/metasploit.md",
         "msf_db":             "tools/metasploit.md",
@@ -2435,6 +2474,120 @@ class ToolExecutor:
 
         stdout, stderr, rc = await self._run_subprocess(cmd, self._timeout_for("searchsploit"))
         return self._ok(stdout if stdout else stderr)
+
+    async def _tool_cve_lookup(self, args: dict) -> dict:
+        cve_id = args.get("cve_id", "").strip()
+        keyword = args.get("keyword", "").strip()
+        max_results = min(int(args.get("max_results", 5)), 20)
+
+        if not cve_id and not keyword:
+            return self._error("Provide either cve_id or keyword.")
+        if cve_id and keyword:
+            return self._error("Provide either cve_id or keyword, not both.")
+
+        # Validate CVE-ID format
+        if cve_id and not re.match(r'^CVE-\d{4}-\d{4,}$', cve_id, re.IGNORECASE):
+            return self._error(f"Invalid CVE ID format: '{cve_id}'. Expected CVE-YYYY-NNNNN.")
+
+        base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        params: dict[str, str] = {}
+        if cve_id:
+            params["cveId"] = cve_id.upper()
+        else:
+            params["keywordSearch"] = keyword
+            params["resultsPerPage"] = str(max_results)
+
+        url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+        def _fetch() -> str:
+            req = urllib.request.Request(url, headers={"User-Agent": "RamiBot-CVE-Lookup/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.read().decode("utf-8")
+
+        try:
+            loop = asyncio.get_event_loop()
+            raw = await loop.run_in_executor(None, _fetch)
+            data = json.loads(raw)
+        except urllib.error.HTTPError as e:
+            return self._error(f"NVD API HTTP error {e.code}: {e.reason}")
+        except urllib.error.URLError as e:
+            return self._error(f"NVD API connection error: {e.reason}")
+        except Exception as e:
+            return self._error(f"CVE lookup failed: {e}")
+
+        total = data.get("totalResults", 0)
+        items = data.get("vulnerabilities", [])
+
+        if not items:
+            query_label = cve_id or f"'{keyword}'"
+            return self._ok(f"No CVEs found for {query_label}.")
+
+        lines: list[str] = []
+        if not cve_id:
+            lines.append(f"NVD search for '{keyword}' — {total} total result(s), showing {len(items)}:\n")
+
+        for item in items:
+            cve = item.get("cve", {})
+            vid = cve.get("id", "N/A")
+            published = cve.get("published", "")[:10]
+            modified = cve.get("lastModified", "")[:10]
+            status = cve.get("vulnStatus", "")
+
+            # Description (English preferred)
+            descs = cve.get("descriptions", [])
+            description = next(
+                (d["value"] for d in descs if d.get("lang") == "en"),
+                descs[0]["value"] if descs else "No description available.",
+            )
+
+            # CVSS scores
+            metrics = cve.get("metrics", {})
+            cvss_info: list[str] = []
+            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                entries = metrics.get(key, [])
+                if entries:
+                    m = entries[0].get("cvssData", {})
+                    version = m.get("version", key[-2:])
+                    score = m.get("baseScore", "N/A")
+                    severity = m.get("baseSeverity") or entries[0].get("baseSeverity", "")
+                    vector = m.get("vectorString", "")
+                    cvss_info.append(f"CVSSv{version}: {score} ({severity}) — {vector}")
+                    break  # prefer the highest version available
+
+            # CPEs / affected products
+            configs = cve.get("configurations", [])
+            affected: list[str] = []
+            for cfg in configs:
+                for node in cfg.get("nodes", []):
+                    for cpe_match in node.get("cpeMatch", []):
+                        if cpe_match.get("vulnerable"):
+                            affected.append(cpe_match.get("criteria", ""))
+            affected = affected[:10]  # cap to avoid huge output
+
+            # References
+            refs = [r.get("url", "") for r in cve.get("references", [])[:5]]
+
+            # Format entry
+            lines.append(f"{'='*60}")
+            lines.append(f"CVE ID   : {vid}")
+            lines.append(f"Status   : {status}")
+            lines.append(f"Published: {published}  |  Modified: {modified}")
+            if cvss_info:
+                lines.append(f"CVSS     : {cvss_info[0]}")
+            else:
+                lines.append("CVSS     : Not available")
+            lines.append(f"\nDescription:\n{description}")
+            if affected:
+                lines.append(f"\nAffected CPEs ({len(affected)}):")
+                for cpe in affected:
+                    lines.append(f"  {cpe}")
+            if refs:
+                lines.append(f"\nReferences:")
+                for r in refs:
+                    lines.append(f"  {r}")
+            lines.append("")
+
+        return self._ok("\n".join(lines))
 
     async def _tool_hashcat_crack(self, args: dict) -> dict:
         hash_file = InputSanitizer.sanitize_path(args["hash_file"])

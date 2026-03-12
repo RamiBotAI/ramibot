@@ -12,7 +12,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.7-blue.svg" />
+  <img src="https://img.shields.io/badge/Version-v3.7.1-blue.svg" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -26,7 +26,7 @@
 </p>
 
 
-# RamiBot v3.7
+# RamiBot v3.7.1
 
 A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, and **proxychains4 proxy routing** with ready-made Burp and Tor profiles.
 
@@ -297,7 +297,7 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 
 ### Overview
 
-- **41+ pentest tools** available as MCP tools, callable by the LLM during any MCP-enabled session
+- **45 pentest tools** available as MCP tools, callable by the LLM during any MCP-enabled session
 - **Auto-connection**: on first backend startup, RamiBot seeds the `rami-kali` MCP server entry automatically — no manual configuration required
 - **Transport**: stdio via `docker exec -i rami-kali python3 /opt/rami-kali/mcp_server.py`
 - **Scope enforcement**: `config.yaml` inside the container defines allowed target ranges; the server rejects out-of-scope calls
@@ -310,6 +310,7 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 |----------|---------------|
 | Recon | nmap, masscan, whois, theHarvester, amass, subfinder, dnsx |
 | Web | nikto, gobuster, ffuf, nuclei, sqlmap, whatweb, wafw00f |
+| CVE Intelligence | cve_lookup (NVD API — CVSS, description, CPEs, references) |
 | Proxy routing | proxychains4 (Burp profile + Tor profile) |
 | Exploit | metasploit-framework, searchsploit, msfvenom |
 | Credential | hydra, medusa, hashcat, john, crackmapexec |
@@ -319,7 +320,7 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 
 ### Knowledge Base
 
-`rami-kali/knowledge/` contains 27 structured Markdown files used by the MCP server to prepend tactical context to tool results. Categories include: tool usage guides, MITRE ATT&CK mappings, result interpretation guides, and operational checklists.
+`rami-kali/knowledge/` contains 28 structured Markdown files used by the MCP server to prepend tactical context to tool results. Categories include: tool usage guides, MITRE ATT&CK mappings, result interpretation guides, and operational checklists.
 
 ### Proxy Routing (proxychains4)
 
