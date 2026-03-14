@@ -10,9 +10,12 @@
 
 <p align="center">
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+    <img src="https://img.shields.io/github/license/RamiBotAI/ramibot" />
   </a>
-  <img src="https://img.shields.io/badge/Version-v3.7.1-blue.svg" />
+  <img src="https://img.shields.io/github/v/release/RamiBotAI/ramibot" />
+  <img src="https://img.shields.io/github/stars/RamiBotAI/ramibot" />
+  <img src="https://img.shields.io/github/downloads/RamiBotAI/ramibot/total" />
+  <img src="https://img.shields.io/github/discussions/RamiBotAI/ramibot" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" />
@@ -25,6 +28,39 @@
   <b>Execute. Analyze. Harden.</b>
 </p>
 
+## Key Features
+
+RamiBot connects AI reasoning with real cybersecurity tools through a structured operations pipeline.
+
+#### AI & Reasoning
+
+- 🧠 Multi-provider LLM support  
+  OpenAI, Anthropic, OpenRouter, LM Studio, and Ollama
+
+- 🧠 Skill Pipeline  
+  Structured methodology: Recon → Exploit → Defense → Reporting
+
+- 🔐 Evidence-Locked Reporting  
+  Prevents hallucinated CVEs, versions, or findings
+
+#### Security Tool Integration
+
+- 🧰 Real security tool execution via MCP  
+  Integrates pentesting tools inside controlled environments
+
+- 🕵️ Rami-Kali MCP server  
+  45+ pentesting tools available to the LLM
+
+#### Infrastructure
+
+- 🐳 Docker-integrated terminal  
+  Run commands directly inside containerized environments
+
+- 🛑 Tool Approval Gate  
+  Human approval before executing security tools
+
+- 📄 One-click PDF report export  
+  Generate structured security reports instantly
 
 # RamiBot v3.7.1
 
@@ -907,3 +943,35 @@ RamiBot is designed for use in authorized, controlled environments.
 cd backend
 python -m pytest tests/ -v
 ```
+
+## 💬 Community & Discussions
+
+RamiBot uses GitHub Discussions as the main place for community interaction.
+
+Join the discussions to share ideas, experiments, and workflows.
+
+### Categories
+
+📣 **Announcements**
+Project updates, releases, and important news.
+
+🧠 **Local LLMs**
+Running RamiBot with local models, benchmarks, GPU performance, and configuration tips.
+
+🧪 **Labs & Experiments**
+Experiments with workflows, tool chaining, and AI-assisted security operations.
+
+🌍 **Real-World Cases**
+Examples of practical security analysis workflows using RamiBot.
+
+💡 **Ideas**
+Feature proposals and suggestions for improving the project.
+
+⁉️ **Q&A**
+Questions about installation, configuration, and usage.
+
+🛠 **Troubleshooting**
+Help with errors, setup problems, Docker issues, and debugging.
+
+👉 Join the discussions here:
+https://github.com/RamiBotAI/ramibot/discussions
