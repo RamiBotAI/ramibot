@@ -21,13 +21,19 @@ def _sanitize_tool_schema(schema: dict) -> dict:
 class AnthropicAdapter(BaseAdapter):
     provider_name = "anthropic"
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", oauth_token: str = ""):
         self.api_key = api_key
+        # Normalize: strip "Bearer " prefix if user pasted full header value
+        self.oauth_token = oauth_token.removeprefix("Bearer ").strip() if oauth_token else ""
         self.base_url = "https://api.anthropic.com/v1"
 
     def _headers(self) -> dict:
+        if self.oauth_token:
+            auth_header = {"Authorization": f"Bearer {self.oauth_token}"}
+        else:
+            auth_header = {"x-api-key": self.api_key}
         return {
-            "x-api-key": self.api_key,
+            **auth_header,
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
@@ -40,9 +46,28 @@ class AnthropicAdapter(BaseAdapter):
             "models": [],
         }
 
+    # Fallback model list used when the /models endpoint rejects OAuth tokens
+    _OAUTH_MODELS = [
+        {"id": "claude-opus-4-6",            "name": "Claude Opus 4.6"},
+        {"id": "claude-sonnet-4-6",          "name": "Claude Sonnet 4.6"},
+        {"id": "claude-haiku-4-5-20251001",  "name": "Claude Haiku 4.5"},
+        {"id": "claude-opus-4-5",            "name": "Claude Opus 4.5"},
+        {"id": "claude-sonnet-4-5-20251001", "name": "Claude Sonnet 4.5"},
+        {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet"},
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+        {"id": "claude-3-5-haiku-20241022",  "name": "Claude 3.5 Haiku"},
+        {"id": "claude-3-opus-20240229",     "name": "Claude 3 Opus"},
+    ]
+
     async def list_models(self) -> list[dict]:
-        if not self.api_key:
-            raise ValueError("Anthropic API key not configured")
+        if not self.api_key and not self.oauth_token:
+            raise ValueError("Anthropic credentials not configured (set API key or OAuth token)")
+        # The /models endpoint rejects OAuth Bearer tokens — return a static list
+        # Validate token format before accepting it
+        if self.oauth_token and not self.api_key:
+            if not self.oauth_token.startswith("sk-ant-oat01-"):
+                raise ValueError("Invalid Anthropic OAuth token format (expected sk-ant-oat01-...)")
+            return self._OAUTH_MODELS
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
                 f"{self.base_url}/models",

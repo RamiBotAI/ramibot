@@ -1,9 +1,11 @@
 {
   "openai": {
-    "api_key": "your_openai_api_key_here"
+    "api_key": "your_openai_api_key_here",
+    "oauth_token": ""
   },
   "anthropic": {
-    "api_key": "your_anthropic_api_key_here"
+    "api_key": "your_anthropic_api_key_here",
+    "oauth_token": ""
   },
   "openrouter": {
     "api_key": "your_openrouter_api_key_here"

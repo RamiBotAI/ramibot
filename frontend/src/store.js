@@ -511,8 +511,8 @@ const useStore = create((set, get) => ({
     set({ settings })
     try {
       const mapped = {
-        openai: { api_key: settings.openai_api_key || '' },
-        anthropic: { api_key: settings.anthropic_api_key || '' },
+        openai: { api_key: settings.openai_api_key || '', oauth_token: settings.openai_oauth_token || '' },
+        anthropic: { api_key: settings.anthropic_api_key || '', oauth_token: settings.anthropic_oauth_token || '' },
         openrouter: { api_key: settings.openrouter_api_key || '' },
         lmstudio: { base_url: settings.lmstudio_base_url || 'http://localhost:1234/v1' },
         ollama: { base_url: settings.ollama_base_url || 'http://localhost:11434' },
@@ -523,6 +523,8 @@ const useStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mapped),
       })
+      const provider = get().selectedProvider
+      if (provider) get().fetchModels(provider)
     } catch (e) {
       console.error('Failed to save settings to backend:', e)
     }

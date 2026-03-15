@@ -217,9 +217,13 @@ def get_adapter(provider: str):
         return adapter_cls(
             api_key=provider_settings.get("api_key", ""),
             base_url=provider_settings.get("base_url", "https://api.openai.com/v1"),
+            oauth_token=provider_settings.get("oauth_token", ""),
         )
     elif provider == "anthropic":
-        return adapter_cls(api_key=provider_settings.get("api_key", ""))
+        return adapter_cls(
+            api_key=provider_settings.get("api_key", ""),
+            oauth_token=provider_settings.get("oauth_token", ""),
+        )
     elif provider == "openrouter":
         return adapter_cls(
             api_key=provider_settings.get("api_key", ""),

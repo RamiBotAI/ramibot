@@ -132,7 +132,9 @@ function PanelInterface({ matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpe
 function PanelApiKeys({ form, handleChange }) {
   const providers = [
     { key: 'openai_api_key', label: 'OpenAI API Key', type: 'password', icon: Key, placeholder: 'sk-...' },
+    { key: 'openai_oauth_token', label: 'OpenAI OAuth Token', type: 'password', icon: Key, placeholder: 'Overrides API key if set (paste with or without Bearer prefix)' },
     { key: 'anthropic_api_key', label: 'Anthropic API Key', type: 'password', icon: Key, placeholder: 'sk-ant-...' },
+    { key: 'anthropic_oauth_token', label: 'Anthropic OAuth Token', type: 'password', icon: Key, placeholder: 'sk-ant-oat01-... (currently blocked by Anthropic for third-party use)' },
     { key: 'openrouter_api_key', label: 'OpenRouter API Key', type: 'password', icon: Key, placeholder: 'sk-or-...' },
     { key: 'lmstudio_base_url', label: 'LM Studio Base URL', type: 'text', icon: Globe, placeholder: 'http://localhost:1234' },
     { key: 'ollama_base_url', label: 'Ollama Base URL', type: 'text', icon: Globe, placeholder: 'http://localhost:11434' },
@@ -919,7 +921,7 @@ function SettingsModal({ onClose }) {
   const { settings, saveSettings, setDockerContainer, matrixEnabled, toggleMatrix, matrixSpeed, setMatrixSpeed, responseLanguage, setResponseLanguage } = useStore()
   const [activeTab, setActiveTab] = useState('interface')
   const [form, setForm] = useState({
-    openai_api_key: '', anthropic_api_key: '',
+    openai_api_key: '', openai_oauth_token: '', anthropic_api_key: '', anthropic_oauth_token: '',
     openrouter_api_key: '',
     lmstudio_base_url: 'http://localhost:1234', ollama_base_url: 'http://localhost:11434',
     ...settings,

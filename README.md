@@ -61,9 +61,9 @@ RamiBot connects AI reasoning with real cybersecurity tools through a structured
 - 📄 One-click PDF report export  
   Generate structured security reports instantly
 
-# RamiBot v3.7.2
+# RamiBot v3.7.3
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, **proxychains4 proxy routing** with ready-made Burp and Tor profiles, **Service-Bound CVE Correlation** that locks every CVE to its exact detected service via CPE data, and a **CVE Query Lock** rule that prevents semantic drift when generating NVD lookup queries after service discovery.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, **proxychains4 proxy routing** with ready-made Burp and Tor profiles, **Service-Bound CVE Correlation** that locks every CVE to its exact detected service via CPE data, a **CVE Query Lock** rule that prevents semantic drift when generating NVD lookup queries after service discovery, and **OAuth token support** for OpenAI (ChatGPT Plus/Pro subscription via Codex CLI) and Anthropic (reserved, pending re-enablement).
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -259,15 +259,17 @@ Streaming events emitted by all adapters:
 ### Supported Providers
 
 **OpenAI**
-- Endpoint: `https://api.openai.com/v1` (configurable base URL)
-- Models: fetched dynamically from `/v1/models`
+- Endpoint: `https://api.openai.com/v1` (configurable base URL) — or `https://chatgpt.com/backend-api/codex/responses` when OAuth token is used
+- Auth: `api_key` → `Authorization: Bearer`; `oauth_token` (from `~/.codex/auth.json`) → ChatGPT backend with JWT-extracted `chatgpt-account-id`
+- Models: fetched dynamically from `/v1/models` (API key mode); static GPT-5.x Codex list (OAuth mode)
 - Tool calling: yes (OpenAI format)
 - Reasoning: yes (o1/o3/o4 series via `reasoning_effort`)
-- Streaming: yes, with `stream_options: include_usage`
+- Streaming: yes — Chat Completions SSE (API key) / Responses API SSE (OAuth)
 
 **Anthropic**
 - Endpoint: `https://api.anthropic.com/v1`
-- Models: fetched dynamically from `/v1/models` (requires API key)
+- Auth: `api_key` → `x-api-key`; `oauth_token` (format `sk-ant-oat01-*`) → `Authorization: Bearer` — currently blocked by Anthropic for third-party use
+- Models: fetched dynamically from `/v1/models` (API key); static Claude 3.x–4.x list (OAuth, validated by token prefix)
 - Tool calling: yes (tool_use blocks; input schema sanitized to remove oneOf/anyOf/allOf)
 - Reasoning: yes (extended thinking via `thinking.budget_tokens`)
 - Streaming: yes (Anthropic SSE event protocol)
@@ -583,13 +585,17 @@ Open `http://localhost:5173`.
 
 API keys and base URLs are configured through the Settings modal in the UI and saved to `backend/settings.json`.
 
-| Provider | Field | Default |
-|----------|-------|---------|
-| OpenAI | `api_key` | — |
-| Anthropic | `api_key` | — |
-| OpenRouter | `api_key` | — |
-| LM Studio | `base_url` | `http://localhost:1234/v1` |
-| Ollama | `base_url` | `http://localhost:11434` |
+| Provider | Field | Notes |
+|----------|-------|-------|
+| OpenAI | `api_key` | From `platform.openai.com` |
+| OpenAI | `oauth_token` | ChatGPT Plus/Pro via Codex CLI — overrides `api_key` if set |
+| Anthropic | `api_key` | From `console.anthropic.com` |
+| Anthropic | `oauth_token` | Reserved — blocked by Anthropic for third-party use as of Feb 2026 |
+| OpenRouter | `api_key` | From `openrouter.ai` |
+| LM Studio | `base_url` | Default `http://localhost:1234/v1` |
+| Ollama | `base_url` | Default `http://localhost:11434` |
+
+**OpenAI OAuth token** — use the `access_token` from `~/.codex/auth.json` (generated by `openai/codex` CLI after `codex` login). When set without an API key, RamiBot routes requests to `https://chatgpt.com/backend-api/codex/responses` using your ChatGPT subscription instead of platform billing. The account ID is extracted automatically from the JWT. Available models: GPT-5.x Codex series.
 
 ### Docker
 
