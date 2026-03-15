@@ -14,7 +14,6 @@
   </a>
   <img src="https://img.shields.io/github/v/release/RamiBotAI/ramibot" />
   <img src="https://img.shields.io/github/stars/RamiBotAI/ramibot" />
-  <img src="https://img.shields.io/github/downloads/RamiBotAI/ramibot/total" />
   <img src="https://img.shields.io/github/discussions/RamiBotAI/ramibot" />
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-purple.svg" />
   <img src="https://img.shields.io/badge/MCP-Integrated-green.svg" />
@@ -62,9 +61,9 @@ RamiBot connects AI reasoning with real cybersecurity tools through a structured
 - 📄 One-click PDF report export  
   Generate structured security reports instantly
 
-# RamiBot v3.7.1
+# RamiBot v3.7.2
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, and **proxychains4 proxy routing** with ready-made Burp and Tor profiles.
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, **proxychains4 proxy routing** with ready-made Burp and Tor profiles, **Service-Bound CVE Correlation** that locks every CVE to its exact detected service via CPE data, and a **CVE Query Lock** rule that prevents semantic drift when generating NVD lookup queries after service discovery.
 
 <p align="center">
   <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
@@ -203,7 +202,7 @@ Every successful MCP tool result is wrapped in immutable evidence tags before be
 
 **Global enforcement (`backend/skills/composer.py`):**
 
-`EVIDENCE_RULES` is injected into every system prompt regardless of team mode or skill. Eight mandatory rules apply to all responses:
+`EVIDENCE_RULES` is injected into every system prompt regardless of team mode or skill. Ten mandatory rules apply to all responses:
 
 | Rule | Enforcement |
 |------|-------------|
@@ -215,6 +214,8 @@ Every successful MCP tool result is wrapped in immutable evidence tags before be
 | Severity from confirmed findings only | No Critical/High/Medium/Low from port number, service name, or version string alone. Default: `"Informational"` if no vulnerability is explicitly reported |
 | Three-layer output discipline | `[RAW OUTPUT]` / `[PARSED DATA]` / `[INTERPRETATION]` clearly separated |
 | No Evidence Block → no fabrication | State `"No tool output available"` and stop |
+| Service-Bound CVE Correlation | Each CVE result carries a `SERVICE BINDING` line (derived from CPE data). A CVE may only be attached to the detected service whose name matches that binding — never reassigned across unrelated services on the same host |
+| CVE Query Lock | `cve_lookup` queries must be derived from the exact product name and version string in the Evidence Block. Forbidden: host IP as query input; semantic pivots to adjacent software (Apache detected → do not query Log4j); famous CVEs introduced from background knowledge without confirmed product presence |
 
 **Skill-level reinforcement:**
 
@@ -346,7 +347,7 @@ RamiBot ships with a pre-integrated red team toolserver built on Kali Linux and 
 |----------|---------------|
 | Recon | nmap, masscan, whois, theHarvester, amass, subfinder, dnsx |
 | Web | nikto, gobuster, ffuf, nuclei, sqlmap, whatweb, wafw00f |
-| CVE Intelligence | cve_lookup (NVD API — CVSS, description, CPEs, references) |
+| CVE Intelligence | cve_lookup (NVD 2.0 API — exact CVE ID, keyword, CPE name, match string, severity filter, date ranges; returns CVSS, SERVICE BINDING, CPEs, references) |
 | Proxy routing | proxychains4 (Burp profile + Tor profile) |
 | Exploit | metasploit-framework, searchsploit, msfvenom |
 | Credential | hydra, medusa, hashcat, john, crackmapexec |

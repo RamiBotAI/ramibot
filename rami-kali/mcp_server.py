@@ -696,25 +696,73 @@ class ToolRegistry:
 
         self._add(
             "cve_lookup",
-            "Look up CVE details from the NVD (National Vulnerability Database). "
-            "Accepts a specific CVE ID (e.g. CVE-2021-44228) or a keyword search. "
-            "Returns CVSS score, severity, description, affected products and references.",
+            "Query the NVD (National Vulnerability Database) CVE 2.0 API. "
+            "Supports exact CVE ID lookup, keyword search by product/version, CPE-based lookup, "
+            "CVSS severity filtering, and date-range filtering. "
+            "Returns CVSS score, severity, description, SERVICE BINDING (from CPE), and references.",
             {
                 "properties": {
                     "cve_id": {
                         "type": "string",
-                        "description": "CVE identifier to look up (e.g. 'CVE-2021-44228'). "
-                                       "Mutually exclusive with keyword.",
+                        "description": "Exact CVE identifier (e.g. 'CVE-2021-44228'). "
+                                       "Mutually exclusive with keyword, cpe_name, and virtual_match_string.",
                     },
                     "keyword": {
                         "type": "string",
-                        "description": "Keyword or product name to search CVEs for "
-                                       "(e.g. 'log4j', 'apache struts 2.5'). "
+                        "description": "Keyword search against CVE descriptions and titles. "
+                                       "Best practice: use 'product version' (e.g. 'OpenSSH 7.9', 'Apache httpd 2.4.38'). "
                                        "Mutually exclusive with cve_id.",
+                    },
+                    "exact_match": {
+                        "type": "boolean",
+                        "description": "When true, keyword must appear as a whole word (keywordExactMatch). "
+                                       "Only valid with keyword.",
+                        "default": False,
+                    },
+                    "cpe_name": {
+                        "type": "string",
+                        "description": "Filter CVEs by a specific CPE 2.3 name "
+                                       "(e.g. 'cpe:2.3:a:openbsd:openssh:7.9:*:*:*:*:*:*:*'). "
+                                       "Mutually exclusive with cve_id.",
+                    },
+                    "virtual_match_string": {
+                        "type": "string",
+                        "description": "CPE match string pattern to filter CVEs "
+                                       "(e.g. 'cpe:2.3:a:apache:http_server:2.4.*'). "
+                                       "Mutually exclusive with cve_id.",
+                    },
+                    "cvss_severity": {
+                        "type": "string",
+                        "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+                        "description": "Filter results to a specific CVSSv3 severity band. "
+                                       "Can be combined with keyword or CPE filters.",
+                    },
+                    "pub_start_date": {
+                        "type": "string",
+                        "description": "Return CVEs published on or after this date (YYYY-MM-DD). "
+                                       "Can be combined with keyword or severity filters.",
+                    },
+                    "pub_end_date": {
+                        "type": "string",
+                        "description": "Return CVEs published on or before this date (YYYY-MM-DD).",
+                    },
+                    "last_mod_start_date": {
+                        "type": "string",
+                        "description": "Return CVEs last modified on or after this date (YYYY-MM-DD).",
+                    },
+                    "last_mod_end_date": {
+                        "type": "string",
+                        "description": "Return CVEs last modified on or before this date (YYYY-MM-DD).",
+                    },
+                    "no_rejected": {
+                        "type": "boolean",
+                        "description": "When true, exclude CVEs with REJECT/Rejected status from results.",
+                        "default": False,
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum number of results to return for keyword searches (1-20).",
+                        "description": "Maximum number of results to return (1-20, default 5). "
+                                       "Not applicable when cve_id is provided.",
                         "default": 5,
                     },
                 },
@@ -2476,25 +2524,71 @@ class ToolExecutor:
         return self._ok(stdout if stdout else stderr)
 
     async def _tool_cve_lookup(self, args: dict) -> dict:
-        cve_id = args.get("cve_id", "").strip()
-        keyword = args.get("keyword", "").strip()
-        max_results = min(int(args.get("max_results", 5)), 20)
+        cve_id               = args.get("cve_id", "").strip()
+        keyword              = args.get("keyword", "").strip()
+        exact_match          = bool(args.get("exact_match", False))
+        cpe_name             = args.get("cpe_name", "").strip()
+        virtual_match_string = args.get("virtual_match_string", "").strip()
+        cvss_severity        = args.get("cvss_severity", "").strip().upper()
+        pub_start_date       = args.get("pub_start_date", "").strip()
+        pub_end_date         = args.get("pub_end_date", "").strip()
+        last_mod_start_date  = args.get("last_mod_start_date", "").strip()
+        last_mod_end_date    = args.get("last_mod_end_date", "").strip()
+        no_rejected          = bool(args.get("no_rejected", False))
+        max_results          = min(int(args.get("max_results", 5)), 20)
 
-        if not cve_id and not keyword:
-            return self._error("Provide either cve_id or keyword.")
-        if cve_id and keyword:
-            return self._error("Provide either cve_id or keyword, not both.")
-
-        # Validate CVE-ID format
+        # ── Validation ────────────────────────────────────────────────────────
+        search_inputs = [cve_id, keyword, cpe_name, virtual_match_string,
+                         pub_start_date, last_mod_start_date]
+        if not any(search_inputs):
+            return self._error(
+                "Provide at least one search input: cve_id, keyword, cpe_name, "
+                "virtual_match_string, pub_start_date, or last_mod_start_date."
+            )
+        if cve_id and any([keyword, cpe_name, virtual_match_string]):
+            return self._error(
+                "cve_id is mutually exclusive with keyword, cpe_name, and virtual_match_string."
+            )
+        if exact_match and not keyword:
+            return self._error("exact_match requires keyword.")
+        if cvss_severity and cvss_severity not in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+            return self._error(
+                f"Invalid cvss_severity '{cvss_severity}'. Must be: LOW, MEDIUM, HIGH, CRITICAL."
+            )
         if cve_id and not re.match(r'^CVE-\d{4}-\d{4,}$', cve_id, re.IGNORECASE):
             return self._error(f"Invalid CVE ID format: '{cve_id}'. Expected CVE-YYYY-NNNNN.")
 
+        # ── Build NVD 2.0 API params ──────────────────────────────────────────
+        def _nvd_date(s: str) -> str:
+            """Normalise YYYY-MM-DD → YYYY-MM-DDTHH:MM:SS.000 for the NVD 2.0 API."""
+            return s if "T" in s else f"{s}T00:00:00.000"
+
         base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
         params: dict[str, str] = {}
+
         if cve_id:
             params["cveId"] = cve_id.upper()
         else:
-            params["keywordSearch"] = keyword
+            if keyword:
+                params["keywordSearch"] = keyword
+                if exact_match:
+                    params["keywordExactMatch"] = ""
+            if cpe_name:
+                params["cpeName"] = cpe_name
+            if virtual_match_string:
+                params["virtualMatchString"] = virtual_match_string
+            if cvss_severity:
+                params["cvssV3Severity"] = cvss_severity
+            if pub_start_date:
+                params["pubStartDate"] = _nvd_date(pub_start_date)
+            if pub_end_date:
+                params["pubEndDate"] = _nvd_date(pub_end_date)
+            if last_mod_start_date:
+                params["lastModStartDate"] = _nvd_date(last_mod_start_date)
+            if last_mod_end_date:
+                params["lastModEndDate"] = _nvd_date(last_mod_end_date)
+            if no_rejected:
+                params["noRejected"] = ""
             params["resultsPerPage"] = str(max_results)
 
         url = f"{base_url}?{urllib.parse.urlencode(params)}"
@@ -2519,12 +2613,45 @@ class ToolExecutor:
         items = data.get("vulnerabilities", [])
 
         if not items:
-            query_label = cve_id or f"'{keyword}'"
+            # Build a human-readable label for the query that was run
+            parts = []
+            if cve_id:
+                parts.append(cve_id)
+            if keyword:
+                parts.append(f"keyword='{keyword}'" + (" (exact)" if exact_match else ""))
+            if cpe_name:
+                parts.append(f"cpe='{cpe_name}'")
+            if virtual_match_string:
+                parts.append(f"match='{virtual_match_string}'")
+            if cvss_severity:
+                parts.append(f"severity={cvss_severity}")
+            if pub_start_date or pub_end_date:
+                parts.append(f"published={pub_start_date or ''}..{pub_end_date or ''}")
+            if last_mod_start_date or last_mod_end_date:
+                parts.append(f"modified={last_mod_start_date or ''}..{last_mod_end_date or ''}")
+            query_label = ", ".join(parts) if parts else "the given query"
             return self._ok(f"No CVEs found for {query_label}.")
 
         lines: list[str] = []
         if not cve_id:
-            lines.append(f"NVD search for '{keyword}' — {total} total result(s), showing {len(items)}:\n")
+            # Build a compact query summary for the header
+            summary_parts = []
+            if keyword:
+                summary_parts.append(f"keyword='{keyword}'" + (" (exact)" if exact_match else ""))
+            if cpe_name:
+                summary_parts.append(f"cpe='{cpe_name}'")
+            if virtual_match_string:
+                summary_parts.append(f"match='{virtual_match_string}'")
+            if cvss_severity:
+                summary_parts.append(f"severity={cvss_severity}")
+            if pub_start_date or pub_end_date:
+                summary_parts.append(f"published={pub_start_date or '*'}..{pub_end_date or '*'}")
+            if last_mod_start_date or last_mod_end_date:
+                summary_parts.append(f"modified={last_mod_start_date or '*'}..{last_mod_end_date or '*'}")
+            query_summary = ", ".join(summary_parts) if summary_parts else "all"
+            lines.append(
+                f"NVD search [{query_summary}] — {total} total result(s), showing {len(items)}:\n"
+            )
 
         for item in items:
             cve = item.get("cve", {})
@@ -2556,13 +2683,24 @@ class ToolExecutor:
 
             # CPEs / affected products
             configs = cve.get("configurations", [])
-            affected: list[str] = []
+            affected_all: list[str] = []
             for cfg in configs:
                 for node in cfg.get("nodes", []):
                     for cpe_match in node.get("cpeMatch", []):
                         if cpe_match.get("vulnerable"):
-                            affected.append(cpe_match.get("criteria", ""))
-            affected = affected[:10]  # cap to avoid huge output
+                            affected_all.append(cpe_match.get("criteria", ""))
+            affected = affected_all[:10]  # cap to avoid huge output
+
+            # Extract unique vendor:product pairs for SERVICE BINDING annotation
+            bound_products: set[str] = set()
+            for cpe in affected_all:
+                cpe_parts = cpe.split(":")
+                # cpe:2.3:part:vendor:product:version:...
+                if len(cpe_parts) >= 5:
+                    vendor = cpe_parts[3].replace("_", " ")
+                    product = cpe_parts[4].replace("_", " ")
+                    if vendor not in ("*", "") and product not in ("*", ""):
+                        bound_products.add(f"{vendor} {product}".strip())
 
             # References
             refs = [r.get("url", "") for r in cve.get("references", [])[:5]]
@@ -2570,6 +2708,20 @@ class ToolExecutor:
             # Format entry
             lines.append(f"{'='*60}")
             lines.append(f"CVE ID   : {vid}")
+            if bound_products:
+                binding = ", ".join(sorted(bound_products))
+                lines.append(
+                    f"SERVICE BINDING: [{binding}] (derived from CPE data). "
+                    "This CVE must only be associated with a detected service "
+                    "that matches one of these products. Never reassign to an "
+                    "unrelated service even if it runs on the same host."
+                )
+            else:
+                lines.append(
+                    "SERVICE BINDING: No CPE data available. "
+                    "Bind this CVE only to the service explicitly named in the description below. "
+                    "Do not associate with any other detected service."
+                )
             lines.append(f"Status   : {status}")
             lines.append(f"Published: {published}  |  Modified: {modified}")
             if cvss_info:
