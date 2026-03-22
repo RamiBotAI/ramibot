@@ -61,13 +61,149 @@ RamiBot connects AI reasoning with real cybersecurity tools through a structured
 - 📄 One-click PDF report export  
   Generate structured security reports instantly
 
-# RamiBot v3.7.3
+# RamiBot v3.8.0
 
-A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, **proxychains4 proxy routing** with ready-made Burp and Tor profiles, **Service-Bound CVE Correlation** that locks every CVE to its exact detected service via CPE data, a **CVE Query Lock** rule that prevents semantic drift when generating NVD lookup queries after service discovery, and **OAuth token support** for OpenAI (ChatGPT Plus/Pro subscription via Codex CLI) and Anthropic (reserved, pending re-enablement).
+A local-first AI chat interface for security operations. Supports multiple LLM providers, real-time streaming, MCP tool integration, a dynamic security skill system, Docker terminal access, Tor transparent proxy management, a persistent findings database, one-click PDF report export, a human-in-the-loop **Tool Approval Gate** that pauses execution before every MCP tool call, a global **Evidence-Locked Reporting** system that prevents the model from fabricating versions, CVEs, severity ratings, or security properties not explicitly present in tool output, a dedicated **Burp Suite web assessment skill**, a **response language selector**, **Hermes tool chaining** that detects and executes `<tool_call>` XML emitted by Llama/Hermes fine-tuned models, **zsh shell with syntax highlighting and autosuggestions** in the Docker terminal, **proxychains4 proxy routing** with ready-made Burp and Tor profiles, **Service-Bound CVE Correlation** that locks every CVE to its exact detected service via CPE data, a **CVE Query Lock** rule that prevents semantic drift when generating NVD lookup queries after service discovery, **OAuth token support** for OpenAI (ChatGPT Plus/Pro subscription via Codex CLI) and Anthropic (reserved, pending re-enablement), and **one-command install and start scripts** (`install.sh` / `install.bat`, `start.sh` / `start.bat`) that automate the full setup from a fresh system.
 
 <p align="center">
-  <img src="assets/ramibot_02.png" width="880" alt="RamiBot UI" />
+  <img src="assets/ramibot_02.png" width="880" style="border-radius:10px;" alt="RamiBot UI" />
 </p>
+
+## Demo
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://www.youtube.com/watch?v=AUpUkzdXBE0">
+        <img src="https://img.youtube.com/vi/AUpUkzdXBE0/maxresdefault.jpg" width="600" style="border-radius:10px;" alt="RamiBot in Action — AI-Assisted Pentesting Pipeline (Claude 4.5 + Rami-Kali)" />
+      </a>
+      <br/>
+      <b>AI-Assisted Pentesting Pipeline (Claude 4.5 + Rami-Kali)</b>
+    </td>
+    <td align="center">
+      <a href="https://www.youtube.com/watch?v=Ff8whSKAWQ4&t=39s">
+        <img src="https://img.youtube.com/vi/Ff8whSKAWQ4/maxresdefault.jpg" width="420" style="border-radius:10px;" alt="RamiBot AI Cybersecurity Demo | Port Scan → CVE Intelligence → Security Report" />
+      </a>
+      <br/>
+      <b>Port Scan → CVE Intelligence → Security Report (Local AI) Qwen 3.5 4B (Q8_0)</b>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Installation
+
+### Requirements
+
+- Python 3.9+
+- Node.js 18+
+- npm
+- [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (required — for the rami-kali MCP server, Docker terminal, and Tor features)
+
+### Windows Installer (easiest)
+
+Download `RamiBot-Setup-v3.8.0.exe` from the [Releases page](https://github.com/RamiBotAI/ramibot/releases), run it, and follow the wizard.
+
+**Before running the installer**, make sure [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) is installed and running. The installer checks for it and will abort if Docker is not found.
+
+The wizard checks for Python 3.9+ and Node.js 18+. If either is missing it downloads and installs them via their official wizards, then installs all Python and npm dependencies automatically. After the wizard completes, launch RamiBot from the desktop shortcut and add your API key(s) in **Settings**.
+
+> **First launch:** on the very first start, RamiBot automatically builds the rami-kali Docker image in the background. This can take a few minutes depending on your connection. Subsequent launches are instant — the image is already built and the container starts in seconds.
+
+## 🎥 Full Installation Demo (Windows)
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=69mGhEFiuXU">
+    <img src="https://img.youtube.com/vi/69mGhEFiuXU/maxresdefault.jpg" width="600"style="border-radius:10px;">
+  </a>
+</p>
+
+### One-command install (recommended)
+
+```bash
+git clone <repository-url>
+cd ramibot
+
+# Linux / macOS
+bash install.sh
+
+# Windows
+install.bat
+```
+
+The script checks all prerequisites (Python, Node, Docker), installs missing ones automatically where possible, sets up the Python venv, installs npm dependencies, copies `settings.example.json → settings.json`, builds the rami-kali Docker image, and starts the container — all in one step. Running it again is safe; existing config is never overwritten.
+
+After install, edit `backend/settings.json` and add your API key(s), then:
+
+```bash
+# Linux / macOS
+bash start.sh
+
+# Windows
+start.bat
+```
+
+`start.sh` / `start.bat` launches backend + frontend in the background and opens `http://localhost:5173` after 4 seconds. The rami-kali container is left running on shutdown (`restart: unless-stopped`).
+
+### Manual install (alternative)
+
+```bash
+git clone <repository-url>
+cd ramibot
+```
+
+**Backend:**
+
+```bash
+cd backend
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+**Frontend:**
+
+```bash
+cd frontend
+npm install
+```
+
+### Run
+
+**One command (after install):**
+
+```bash
+bash start.sh      # Linux / macOS
+start.bat          # Windows
+```
+
+**Two terminals (manual):**
+
+```bash
+# Terminal 1
+cd backend
+python -m uvicorn main:app --reload --port 8000
+
+# Terminal 2
+cd frontend
+npm run dev
+```
+
+**Makefile (macOS/Linux):**
+
+```bash
+make install
+make dev
+```
+
+Open `http://localhost:5173`.
 
 ---
 
@@ -432,45 +568,6 @@ Requires a Tor installation inside the container. Intended for use in isolated l
 
 ---
 
-## Installation
-
-### Requirements
-
-- Python 3.10+
-- Node.js 18+
-- npm
-- Docker (optional, for terminal and Tor features; required for rami-kali MCP server)
-
-### Clone
-
-```bash
-git clone <repository-url>
-cd ramibot
-```
-
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-```
-
-
 ### 🔴 Rami-Kali (Core MCP Tool Server)
 
 Rami-Kali is the official MCP tool server for RamiBot and provides real penetration testing tooling (nmap, metasploit, hydra, etc.).
@@ -551,31 +648,6 @@ make rami-kali-build     # rebuild after changes
 
 docker exec -it rami-kali zsh    # open a zsh shell inside
 ```
-
----
-
-### Run
-
-**Two terminals:**
-
-```bash
-# Terminal 1
-cd backend
-python -m uvicorn main:app --reload --port 8000
-
-# Terminal 2
-cd frontend
-npm run dev
-```
-
-**Makefile (macOS/Linux):**
-
-```bash
-make install
-make dev
-```
-
-Open `http://localhost:5173`.
 
 ---
 

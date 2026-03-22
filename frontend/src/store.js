@@ -39,7 +39,7 @@ const useStore = create((set, get) => ({
   teamMode: localStorage.getItem('ramibot_team') || 'red',
   responseLanguage: localStorage.getItem('ramibot_lang') || 'auto',
   terminalCount: 0,
-  dockerContainer: localStorage.getItem('ramibot_docker_container') || '',
+  dockerContainer: localStorage.getItem('ramibot_docker_container') || 'rami-kali',
   torActive: false,
   matrixEnabled: localStorage.getItem('ramibot_matrix') !== 'false',
   matrixSpeed: Number(localStorage.getItem('ramibot_matrix_speed') || 2),
