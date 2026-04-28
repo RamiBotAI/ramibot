@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ramibotai-ramibot-badge.png)](https://mseep.ai/app/ramibotai-ramibot)
+
 <p align="center">
   <img src="assets/ramibot.png" width="280" alt="RamiBot Logo" />
 </p>
